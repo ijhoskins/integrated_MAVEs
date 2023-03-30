@@ -1,0 +1,34 @@
+---
+title: "COMT_protein_VE"
+author: "Ian Hoskins"
+date: "2023-03-30"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## COMT variant effects on protein abundance
+
+We cloned a COMT transgene (MB-COMT) containing part of its 5' UTR (exon 2), a N-terminal Flag tag, a C-terminal moxGFP tag, and a bicistronic IRES-mCherry. 
+
+We ordered two variant libraries from Twist that span clinically-relevant common population SNPs (58 codons, 3538 possible variants).
+
+We stably-expressed these variant libraries in a HEK293T landing pad cell line (293T iCasp9 Blast, Matreyek et al. 2020) and induced expression with 2 µg/mL Dox for 24 h prior to FACS.
+
+We then used FACS to sort cells based on moxGFP (protein) and mCherry (mRNA proxy) into four populations (hereafter quadrants).
+
+Q1: High protein, high mRNA (correlated population)
+
+Q2: Low protein, low mRNA (correlated population)
+
+Q3: Low protein (to bottom right of diagonal)
+
+Q4: High protein (to upper left of diagonal)
+
+We extracted gDNA from input cells and from sorted populations after outgrowth, then used an amplicon library preparation method for targeted enrichment of the two regions of interest (ROIs).
+
+We called variants using satmut_utils v1.0.3-dev001 and then used limma to determine variants enriched or depleted in each quadrant relative to the input (limma-trend with empirical Bayes moderation and Benjamini-Hochberg test correction).
+
+Since the transgene corresponds to the MB-COMT protein isoform and crystal structures are for the S-COMT isoform, we subtracted 50 from the amino acid position to adjust the sites relative to the S-COMT isoform, and then filtered out variants outside this isoform.
