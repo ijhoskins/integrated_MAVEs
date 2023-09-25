@@ -1,0 +1,6 @@
+pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS	Cenik_lab	transcript	1	6233	.	+	.	transcript_id "pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS"; gene_type "protein_coding"; gene_name "COMT"; transcript_type "protein_coding";
+pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS	Cenik_lab	start_codon	4653	4655	.	+	0	transcript_id "pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS"; gene_type "protein_coding"; gene_name "COMT"; transcript_type "protein_coding";
+pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS	Cenik_lab	CDS	4653	6203	.	+	0	transcript_id "pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS"; gene_type "protein_coding"; gene_name "COMT"; transcript_type "protein_coding";
+pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS	Cenik_lab	exon	1	6233	.	+	0	transcript_id "pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS"; gene_type "protein_coding"; gene_name "COMT"; transcript_type "protein_coding";
+pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS	Cenik_lab	stop_codon	6204	6206	.	+	0	transcript_id "pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS"; gene_type "protein_coding"; gene_name "COMT"; transcript_type "protein_coding";
+
