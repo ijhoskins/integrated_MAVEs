@@ -1,14 +1,14 @@
 ---
 title: "COMT integrated MAVEs"
 author: "Ian Hoskins"
-date: "8/01/2023"
+date: "10/31/2023"
 output:
   html_document:
     df_print: paged
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo=TRUE, cache=TRUE)
+knitr::opts_chunk$set(echo=FALSE, warning=FALSE, message=FALSE)
 ```
 
 
@@ -33,43 +33,38 @@ library(ribor)
 library(kohonen)
 library(apcluster)
 library(lawstat)
-library(easyCODA)
 library(ALDEx2)
 library(gplots)
 library(ggcoverage)
 library(rtracklayer)
 
-source("/Users/ianhoskins/satmut_utils_dev/satmut_utils/src/prototype/summarization_utils.r")
-source("/Users/ianhoskins/satmut_utils_dev/satmut_utils/src/prototype/modeling_utils.r")
+source("https://raw.githubusercontent.com/ijhoskins/satmut_utils/satmut_utils_dev/src/prototype/summarization_utils.r")
+source("https://raw.githubusercontent.com/ijhoskins/satmut_utils/satmut_utils_dev/src/prototype/modeling_utils.r")
 
-comt_base_dir<- "/Users/ianhoskins/data_staging/integrative_MAVEs"
+data_dir<- "/tmp/integrative_MAVEs.tar.gz"
+base_file<- download.file("https://zenodo.org/records/10059317/files/integrative_MAVEs.tar.gz?download=1", destfile=data_dir, method="curl", mode="wb")
+untar(data_dir, exdir="/tmp")
+comt_base_dir<- "/tmp/integrative_MAVEs_submit"
+
 comt_02dec2021_base_dir<- paste(comt_base_dir, "COMT_02DEC2021", sep="/")
 comt_15aug2022_base_dir<- paste(comt_base_dir, "COMT_15AUG2022", sep="/")
 comt_03nov2022_base_dir<- paste(comt_base_dir, "COMT_03NOV2022", sep="/")
 comt_18feb2023_base_dir<- paste(comt_base_dir, "COMT_18FEB2023", sep="/")
 comt_23mar2023_base_dir<- paste(comt_base_dir, "COMT_23MAR2023", sep="/")
 
-comt_02dec2021_sim_dir<- paste(comt_02dec2021_base_dir, "sim", sep="/")
 comt_03nov2022_sim_dir<- paste(comt_03nov2022_base_dir, "sim", sep="/")
 
 comt_res_base_dir<- paste(comt_base_dir, "results", sep="/")
 
-comt_clinvar_dir<- paste(comt_base_dir, "COMT_clinvar", sep="/")
-kozak_dir<- paste(comt_base_dir, "kozak", sep="/")
 comt_twist_qc_dir<- paste(comt_base_dir, "Twist_QC", sep="/")
-
-comt_lysis_buffers_dir<- paste(comt_base_dir, "COMT_lysis_buffers_trial1", sep="/")
-comt_dox_titration_dir<- paste(comt_base_dir, "UTR5_COMT_Dox_titration", sep="/")
 
 comt_vec_val_dir<- paste(comt_base_dir, "COMT_endo_UTR5_vs_UTR5_del", sep="/")
 comt_vec_val_tr1_dir<- paste(comt_vec_val_dir, "293T_LLP_COMT_vector_validation_trial1", sep="/")
 comt_vec_val_tr2_dir<- paste(comt_vec_val_dir, "293T_LLP_COMT_vector_validation_trial2", sep="/")
-# Not assayed yet; have DNaseI RNAs and lysates for WB
-#comt_vec_val_tr3_dir<- paste(comt_vec_val_dir, "293T_LLP_COMT_vector_validation_trial3", sep="/")
 
 comt_utr5_mutant_dir<- paste(comt_base_dir, "UTR5_mutants", sep="/")
 
-tripseq_dir<- "/Users/ianhoskins/TrIP_seq"
+tripseq_dir<- paste(comt_base_dir, "TrIP_seq", sep="/")
 comt_pp_dir<- paste(comt_base_dir, "COMT_polysome_profiling", sep="/")
 comt_rp_dir<- paste(comt_base_dir, "COMT_ribosome_profiling", sep="/")
 comt_facs_dir<- paste(comt_base_dir, "COMT_FACS", sep="/")
@@ -81,13 +76,11 @@ comt_pp_roi1_trial4_dir<- paste(comt_pp_dir, "IH_07JUL2022_COMT_ROI_1_2_trial4",
 comt_pp_roi_trial5_dir<- paste(comt_pp_dir, "IH_12JUL2022_COMT_ROI_1_2_trial5", sep="/")
 comt_pp_roi_trial6_dir<- paste(comt_pp_dir, "IH_22JUL2022_COMT_ROI_1_2_trial6", sep="/")
 
-probing_data_dir<- paste(comt_base_dir, "RASP_files", "selected_data", sep="/")
+probing_data_dir<- paste(comt_base_dir, "RASP_files", sep="/")
 codon_data_dir<- paste(comt_base_dir, "codon_data", sep="/")
 demask_dir<- paste(comt_base_dir, "DeMaSk", sep="/")
+esm1b_dir<- paste(comt_base_dir, "ESM1b", sep="/")
 gnomad_dir<- paste(comt_base_dir, "gnomAD", sep="/")
-
-comt_clinvar_bed_dt<- fread(paste(comt_clinvar_dir, "clinvar_COMT_mutagenesis_genomic.bed", sep="/"))
-names(comt_clinvar_bed_dt)<- c("contig", "start", "stop")
 
 # Mutagenesis region was defined initially as a 64 codon region
 grch38_roi1_mutagenesis_coords<- seq(19962644, 19962748)
@@ -155,18 +148,10 @@ probing_metadata_dt<- data.table(SampleName=c("DIM-2P-seq_hg38_Cell_2017_DMS_inv
 
 comt_rna_probing_dt<- as.data.table(LoadTrackFile(track.folder=probing_data_dir, format="bedgraph", meta.info=probing_metadata_dt))
 
-comt_rna_probing_gtf<- import.gff(paste(probing_data_dir, "gencode.v29.annotation.exons.COMT.clean.gtf", sep="/"), format="gtf")
-
 comt_rna_probing_regions=data.frame(start=c(grch38_roi1_mutagenesis_coords[1], grch38_roi2_mutagenesis_coords[1]),
                                     end=c(grch38_roi1_mutagenesis_coords[length(grch38_roi1_mutagenesis_coords)], 
                                           grch38_roi2_mutagenesis_coords[length(grch38_roi2_mutagenesis_coords)]),
                                     label=c("ROI 1", "ROI 2"))
-
-#comt_rna_probing_cov_gg<- ggcoverage(data=comt_rna_probing_dt)
-#print(comt_rna_probing_cov_gg)
-
-# For some reason I get errors when running the command
-#ggcoverage(as.data.frame(comt_rna_probing_dt), mark.region=comt_rna_probing_regions, mark.color="thistle2", gene.name="COMT")+geom_gene(gtf.gr=comt_rna_probing_gtf)
 
 comt_rna_probing_sum_dt<- comt_rna_probing_dt[,.(Sum_score=sum(score)), by=.(Type, Group)]
 
@@ -262,18 +247,7 @@ rm(comt_rna_probing_gg)
 ```
 
 
-# COMT mutagenesis region mapping and uniformity by Twist readout
-
-```{r Mapping ClinVar variants from genomic to expression clone position}
-
-mutagenesis_coord_clinvar_dt<- mutagenesis_coord_dt[Genomic%in%comt_clinvar_bed_dt[,start]]
-
-comt_clinvar_expr_bed_dt<- data.table(
-  contig="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP", 
-  start=mutagenesis_coord_clinvar_dt[,Expression], 
-  stop=mutagenesis_coord_clinvar_dt[,Expression+1])
-
-```
+# Twist library QC
 
 ```{r COMT library uniformity}
 
@@ -368,140 +342,13 @@ rm(comt_library_both_type_gg)
 ```
 
 
-# COMT experimental optimization
-
-## COMT lysis buffer testing
-
-Purpose was to determine if there was a particular detergent that solubilizes maximal levels of COMT membrane and cytoplasmic protein isoforms.
-
-I harvested passage 19 LLP UTR5-COMT cells at 50% confluency after 2 µg/mL Dox induction a day prior (4 µg/mL induction at days 2 and 3 pre-harvest). Before harvest cells were stimulated with fresh media for 2.5 h, washed once with warm PBS, then lysed with 325 µL the following lysis buffers, all modified from the RP lysis buffer with the exception of the RIPA buffers:
-
-1. 1% Triton X-100
-2. 1% NP-40
-3. 1x RIPA (1% NP-40, 0.1% SDS, 0.25% sodium deoxycholate)
-4. 1% TritonX-100, 1% DDM
-5. 1% NP-40, 1% DDM
-6. 1x RIPA, 1% DDM
-
-I included the UTR5-COMT and UTR5del-COMT 1x RIPA control lysates prepared in the "COMT nativePAGE trial 1" experiment. These lysates were harvested with the same RIPA buffer but were grown to higher confluency (~70%) than the current experiment. 
-
-```{r COMT lysis buffers}
-
-comt_lysis_dt<- fread(paste(
-  comt_lysis_buffers_dir, "COMT_lysis_buffer_trial1_tidy.csv", sep="/"), sep=",")
-
-comt_lysis_dt[,Flag_Actin_ratio:=Flag/Actin]
-
-# Plot Flag:actin ratio
-comt_lysis_gg<- ggplot(
-  data=comt_lysis_dt[
-    Construct=="UTR5-COMT" & Experiment=="COMT_lysis_buffers_trial1"], 
-  aes(x=Buffer, y=Flag_Actin_ratio))
-
-comt_lysis_gg+
-  geom_point()+
-  scale_y_continuous(breaks=seq(0,1.5,0.25))+
-  coord_cartesian(ylim=c(0,1.5))+
-  labs(x="Lysis buffer", y="Flag:action signal ratio")+
-  theme_cowplot()
-
-# Ratio may be misleading; plot effect on just Flag signal
-comt_lysis_gg<- ggplot(
-  data=comt_lysis_dt[
-    Construct=="UTR5-COMT" & Experiment=="COMT_lysis_buffers_trial1"], 
-  aes(x=Buffer, y=Flag))
-
-comt_lysis_gg+
-  geom_point()+
-  labs(x="Lysis buffer", y="Flag signal")+
-  theme_cowplot()
-
-rm(comt_lysis_gg)
-  
-# Use RIPA control lysates to estimate effect size of UTR5 del on protein abundance
-# of membrane isoform
-comt_construct_gg<- ggplot(
-  data=comt_lysis_dt[Experiment=="COMT_nativePAGE_trial1"], 
-  aes(x=Construct, y=Flag_Actin_ratio))
-
-comt_construct_gg+
-  geom_point()+
-  scale_y_continuous(breaks=seq(0,2.5,0.25))+
-  coord_cartesian(ylim=c(0,2.5))+
-  labs(x="COMT construct", y="Flag:action signal ratio")+
-  theme_cowplot()
-
-# Flag signal only
-comt_construct_gg<- ggplot(
-  data=comt_lysis_dt[Experiment=="COMT_nativePAGE_trial1"], 
-  aes(x=Construct, y=Flag))
-
-comt_construct_gg+
-  geom_point()+
-  labs(x="COMT construct", y="Flag signal")+
-  theme_cowplot()
-
-rm(comt_construct_gg)
-  
-```
-
-Results indicate that inclusion of 1% DDM may help improve capture of the membrane isoform, as Flag:actin signal was slightly higher when including DDM in three ionic detergents. However, this may be misguided as when examining specifically Flag signal, DDM results in decreased Flag signal. Thus, stronger decreases to Actin solubilization may lead to an errant conclusion that DDM improves MB-COMT solubilization.
-
-Which ionic detergent is best is not clear. While Triton-X showed slightly higher Flag:actin ratio than RIPA, when examining just Flag signal, RIPA yields the highest signal.
-
-Thus, it appears there is no lysis buffer formulation that outcompetes others for COMT solubilization. Stick with standard RIPA buffer without DDM.
-
-
-## Dox titration for COMT induction
-
-Purpose was to test higher levels of Dox (>2 µg/mL) for higher COMT transcript abundance.
-
-```{r COMT Dox titration}
-
-comt_dox_titr_dt<- fread(paste(
-  comt_dox_titration_dir, "IH_09JUL2021_COMT_Dox_titration_qPCR.csv", sep="/"), sep=",", stringsAsFactors=T)
-
-comt_dox_titr_dt[,Dox:=as.factor(Dox)]
-
-three_cols<- c("darkgreen", "brown", "tan")
-
-comt_dox_titr_gg<- ggplot(
-  data=comt_dox_titr_dt, 
-  aes(x=Dox, y=FC, col=Assay))
-
-comt_dox_titr_gg+
-  geom_jitter(size=2.5, width=0.1)+
-  coord_cartesian(ylim=c(0,1.2))+
-  scale_y_continuous(breaks=seq(0,1.2,.2))+
-  scale_color_manual(values=three_cols)+
-  labs(x="Doxycyline concentration (µg/mL)", col="qPCR assay",
-       y="Vector mRNA fold change \nrelative to lowest Dox")+
-  theme_cowplot()
-  
-```
-
-No effect of increased Dox was observed, which was similarly communicated by other researchers (Kamyab Javanmardi, Atine Cote). While increased Dox may affect the proportion of cells with fluorescence as read by IRES-mCherry, for each individual cell, expression is likely driven by stochastic bursting transcription.
-
-
-# COMT 5' UTR deletion affect on mRNA abundance
-
-Purpose was to test for a difference in mRNA abundance, polysome association, and protein abundance for the 5' UTR del (53 nt) covering the exon 2 uORFs versus the endogenous COMT 5' UTR. Here, endogenous may be a slight misnomer, as the first COMT exon is not included in the construct (it is high-GC and probably difficult to clone).
-
-Three experiments have been conducted so far:
-COMT vector validation trial 1, 2, 3
+# COMT 5' UTR deletion
 
 ```{r COMT RT-qPCR for endo UTR5 and UTR5 del}
 
-# First qPCR on total lysate RNA from polysome profiling trial 1
-# IH_14JUL2021_LLP_COMT_vec_val_trial2_total_RTqPCR_tidy.csv
+comt_rna_exp1_dt<- fread(paste(comt_vec_val_tr2_dir, "IH_14JUL2021_LLP_COMT_vec_val_trial2_total_RTqPCR.csv", sep="/"), sep=",")
 
-# IH_09AUG2021_293TLLP_vec_val_tr2_pp1_2_mCherry_qPCR_cntrl_tidy.csv
-
-comt_rna_exp1_dt<- fread(paste(
-  comt_vec_val_tr2_dir, "IH_14JUL2021_LLP_COMT_vec_val_trial2_total_RTqPCR.csv", sep="/"), sep=",")
-
-comt_rna_exp2_dt<- fread(paste(
-  comt_vec_val_tr2_dir, "IH_04AUG2021_293T_LLP_vec_val_tr2_pp_tr1_2_rtqPCR.csv", sep="/"), sep=",")
+comt_rna_exp2_dt<- fread(paste(comt_vec_val_tr2_dir, "IH_04AUG2021_293T_LLP_vec_val_tr2_pp_tr1_2_rtqPCR.csv", sep="/"), sep=",")
 
 comt_rna_exp3_dt<- fread(paste(comt_vec_val_tr2_dir, "IH_09AUG2021_293TLLP_vec_val_tr2_pp1_2_mCherry_qPCR_cntrl.csv",sep="/"),sep=",")
 
@@ -541,6 +388,8 @@ comt_rna_exp1_gg+
 
 comt_rna_exp1_ttest_res<- comt_rna_exp1_dt[, t.test(FC ~ Sample, data=.SD)]
 
+rm(comt_rna_exp1_gg)
+
 
 # Experiment 2- polysome profiling trial 2 (100 µg/mL CHX) total lysate
 # (plus trial 1 samples)
@@ -561,6 +410,7 @@ comt_rna_exp2_gg+
 comt_rna_exp2_ttest_res<- comt_rna_exp2_dt[Assay=="COMT_vec_RNA", t.test(FC ~ Sample, data=.SD)]
 comt_roi2_exp2_ttest_res<- comt_rna_exp2_dt[Assay=="COMT_vec_RNA", t.test(FC ~ Sample, data=.SD)]
 
+rm(comt_rna_exp2_gg)
 
 # Experiment 3- ran on Viia7 instrument C and to include mCherry assay
 # used COMT_vec_RNA assay again but ran out of template so input was 
@@ -583,6 +433,8 @@ comt_rna_exp3_gg+
 comt_rna_exp3_ttest_res<- comt_rna_exp3_dt[Assay=="COMT_vec_RNA", t.test(FC ~ Sample, data=.SD)]
 mcherry_rna_exp3_ttest_res<- comt_rna_exp3_dt[Assay=="mCherry_qPCR", t.test(FC ~ Sample, data=.SD)]
 
+rm(comt_rna_exp3_gg)
+
 # Experiment 4- ran on Viia7 instrument C 
 # repeat all samples and mCherry assay but switching well positions for assays
 comt_rna_exp4_gg<- ggplot(
@@ -603,6 +455,7 @@ comt_rna_exp4_gg+
 comt_rna_exp4_ttest_res<- comt_rna_exp4_dt[Assay=="COMT_vec_RNA", t.test(FC ~ Sample, data=.SD)]
 mcherry_rna_exp4_ttest_res<- comt_rna_exp4_dt[Assay=="mCherry_qPCR", t.test(FC ~ Sample, data=.SD)]
 
+rm(comt_rna_exp4_gg)
 
 # Plot mean FC across qPCR experiments
 # ran on Viia7 instrument C but switching well positions for assays
@@ -643,6 +496,7 @@ comt_ttest_res<- comt_rna_all_summ_dt[Assay=="COMT_vec_RNA", t.test(Median_FC ~ 
 comt_roi2_ttest_res<- comt_rna_all_summ_dt[Assay=="COMT_ROI_2", t.test(Median_FC ~ Sample, data=.SD)]
 mcherry_ttest_res<- comt_rna_all_summ_dt[Assay=="mCherry_qPCR", t.test(Median_FC ~ Sample, data=.SD)]
 
+rm(comt_rna_all_summ_gg)
 
 # Finally plot just COMT vec RNA and mCherry assays
 comt_rna_all_summ_final_gg<- ggplot(
@@ -677,6 +531,8 @@ comt_rna_all_summ_final_gg+
        y="Trasgene mRNA fold change \nUTR5 del to endo UTR")+
   theme_cowplot()
 
+rm(comt_rna_all_summ_final_gg)
+
 comt_filt_ttest_res<- comt_rna_all_summ_dt[
   Assay=="COMT_vec_RNA" & `Sample Name`!="tr2_1C", t.test(Median_FC ~ Sample, data=.SD)]
 
@@ -691,11 +547,6 @@ mcherry_filt_ttest_res<- comt_rna_all_summ_dt[
 # However it made a small impact on the COMT assays, making them less significant
 
 ```
-
-The 53 bp deletion clone (UTR5del) was _depleted_ relative to the endogenous 5' UTR by over 2-fold. This is consistent with polysome profiling from the same lysate, but contrary to the results obtained from flow cytometry and immunoblotting.
-
-
-# COMT 5' UTR deletion affect on mRNA and protein abundance by flow cytometry
 
 ```{r COMT flow cytometry for endo UTR5 and UTR5 del}
 
@@ -722,6 +573,8 @@ comt_utr5_endo_vs_del_flow_gg+
   geom_density()+
   theme_cowplot()
 
+rm(comt_utr5_endo_vs_del_flow_gg)
+
 comt_vec_val_tr1_select_both_dt[,median(`GFP-A`), by=.(Sample)]
 # 8115.58/4064.82
 
@@ -731,70 +584,6 @@ comt_vec_val_tr1_select_both_dt[,median(log10(`GFP-A`), na.rm=TRUE), by=.(Sample
 comt_vec_val_tr1_select_both_dt[,wilcox.test(`GFP-A`~Sample)]
 
 ```
-
-
-# TrIP-seq polysome profiling data for COMT
-
-Examine the distribution of COMT observed in the TrIP-seq dataset.
-
-```{r COMT TrIP-seq polysome profiling}
-
-tripseq_gene_dt<- fread(paste(
-  tripseq_dir, "GSE69352_tripseq_gene_tpm_ensembl_v75.csv", sep="/"), sep=",")
-
-tripseq_gene_melt_dt<- melt(
-  data=tripseq_gene_dt, id.vars=c("gene_name", "gene_id", "gene_biotype"), 
-  value.name="TPM", variable.name="Fraction")
-
-tripseq_gene_melt_dt[,Fraction_base:=sapply(strsplit(as.character(Fraction), "_"), head, 1)]
-tripseq_gene_melt_dt[,Fraction_base:=as.factor(Fraction_base)]
-
-tripseq_gene_melt_comt_dt<- tripseq_gene_melt_dt[gene_name=="COMT"]
-
-tripseq_gene_melt_comt_dt[,Ribo_num:=substr(Fraction_base,5,5)]
-tripseq_gene_melt_comt_dt[Fraction_base=="cyto", Ribo_num:=0]
-tripseq_gene_melt_comt_dt[Fraction_base=="80S", Ribo_num:=1]
-tripseq_gene_melt_comt_dt[,Ribo_num:=as.integer(Ribo_num)]
-
-tripseq_gene_melt_comt_gg<- ggplot(
-  data=tripseq_gene_melt_comt_dt, 
-  aes(x=Ribo_num, y=TPM))
-
-tripseq_gene_melt_comt_gg+
-  geom_point(size=2)+
-  geom_smooth(se=FALSE)+
-  scale_x_continuous(breaks=seq(0,8))+
-  labs(x="Fraction", y="TPM")+
-  theme_cowplot()
-
-# Summarize replicates
-tripseq_gene_melt_comt_summ_dt<- tripseq_gene_melt_comt_dt[,.(Mean_TPM=mean(TPM), SD_TPM=sd(TPM)), by=.(Fraction_base)]
-
-tripseq_gene_melt_comt_summ_dt[,Fraction_base:=factor(
-  Fraction_base, levels=c("cyto", "80S", "poly2", "poly3", "poly4", "poly5", "poly6", "poly7", "poly8"))]
-
-tripseq_gene_melt_comt_gg<- ggplot(
-  data=tripseq_gene_melt_comt_summ_dt, 
-  aes(x=Fraction_base, y=Mean_TPM, 
-      ymax=Mean_TPM+SD_TPM, 
-      ymin=Mean_TPM-SD_TPM))
-
-tripseq_gene_melt_comt_gg+
-  geom_bar(stat="identity", fill="steelblue")+
-  geom_errorbar(col="grey", width=0.2)+
-  labs(x="Fraction", y="Mean TPM +/- SD")+
-  theme_cowplot()
-
-rm(tripseq_gene_melt_comt_gg)
-
-```
-
-It appears COMT is highly engaged with ribosomes, although variability in the monosome and mid-polysome fractions makes the interpretation less clear.
-
-
-## UTR5-Flag-COMT-moxGFP and 5' UTR del polysome profiling trial 1
-
-This experiment used 10 µg/mL CHX in the PBS wash buffers, with no pre-incubation in media. Cells were stimulated for 1 h with fresh warm media and were at 50-60% confluency at harvest.
 
 ```{r COMT UTR5 polysome profiling trial 1}
 
@@ -891,13 +680,6 @@ comt_pp1_3c_gg+
 rm(comt_pp1_3c_gg)
 
 ```
-
-
-# UTR5-Flag-COMT-moxGFP and 5' UTR del polysome profiling
-
-Trial 2:
-
-This experiment used 100 µg/mL CHX pre-treatment in media for 10 min at 37 ˚C, prior to wash in PBS with 100 µg/mL CHX. Cells were stimulated for 2.5 h with fresh warm media and were at 90-95% confluency at harvest. Polysomes were fractionated on Biocomp Piston Gradient Fractionator with version 2 and Triax detector with simple UV detection. Gradients were fractionated into 24 raw fractions of ~480 µL volume at 0.2 mm/s speed.
 
 ```{r COMT UTR5 polysome profiling trial 2}
 
@@ -1023,58 +805,9 @@ rm(comt_pp2_3b_ex_gg)
 
 ```
 
-RNA yields were checked after phenol-chloroform extraction and then after DNaseI-treatment and column re-purification of RNA. 
-
-```{r COMT UTR5 polysome profiling trial 2 RNA yields}
-
-comt_pp2_rna_yields_dt<- as.data.table(read_xlsx(paste(comt_pp_dir, "IH_21JUL2021_LLP_COMT_vec_val_trial2_pp_trial2_RNA_extract.xlsx",sep="/")))
-
-comt_pp2_rna_yields_dt[,Construct_short:=factor(Construct_short, levels=c("endoUTR5", "UTR5del"))]
-
-# First plot raw RNA yields from sucrose precipitation and then phenol-chloroform extraction
-comt_pp2_rna_yields_gg<- ggplot(
-  data=comt_pp2_rna_yields_dt, 
-  aes(x=Metafraction, y=Concentration_ng_uL, col=Construct_short))
-
-comt_pp2_rna_yields_gg+
-  expand_limits(y=0)+
-  geom_point(size=2, position=position_dodge(width=0.9))+
-  scale_color_manual(values=two_cols)+
-  labs(y="DNaseI-treated RNA yield, ng/uL", 
-       col="COMT construct")+
-  theme_cowplot()+
-  theme(legend.position="bottom")
-
-rm(comt_pp2_rna_yields_gg)
-
-# Yields after DNaseI treatment and purification with 
-# Zymo RNA Clean and Concentrator, 10 µL elution in water
-comt_pp2_rna_yields_gg<- ggplot(
-  data=comt_pp2_rna_yields_dt, 
-  aes(x=Metafraction, y=Concentration_ng_uL_DNaseI_repure, col=Construct_short))
-
-comt_pp2_rna_yields_gg+
-  expand_limits(y=0)+
-  geom_point(size=2, position=position_dodge(width=0.9), alpha=0.7)+
-  scale_color_manual(values=two_cols)+
-  labs(y="DNaseI-treated RNA yield, ng/uL", 
-       col="COMT construct")+
-  theme_cowplot()+
-  theme(legend.position="bottom")
-
-rm(comt_pp2_rna_yields_gg)
-
-# So RNA yields were similar between the two constructs
-# The subunit fraction shows the lowest yield
-# and the terminal fractions show highest yield
-# in accordance with polysome profiles
-
-```
-
-1st strand cDNA was synthesized with 2.5 µM oligo dT (18) and 2.5 µM random hexamers with Superscript IV at 23 ˚C for 10 min, 55 ˚C for 1 h, then 80 ˚C for 10 min. Then RNA was degraded by addition of 1 µL NEB RNaseH and incubation at 37 ˚C for 20 min. 1st strand cDNA was diluted 1:10 in water and 2 µL was input into a 10 µL PowerUp SYBR qPCR reaction with 3-step standard cycling with anneal at 55 ˚C for 15 s and extend at 72 ˚C for 1 min.
-
 ```{r COMT UTR5 polysome profiling trial 2 RT-qPCR results}
 
+# IVT_B is an in vitro transcribed spike-in RNA prior to phenol chloroform extraction
 # How well did we extract the RNA based on uniformity of IVT_B Cts?
 ivt_pp2_rtqpcr_dt<- fread(paste(comt_pp_dir, "IH_22JUL2021_COMT_vec_val_tr2_pp_tr2_qPCR_IVT_tidy.csv",sep="/"),sep=",")
 
@@ -1098,8 +831,7 @@ rm(ivt_pp2_rtqpcr_gg)
 
 # Now plot the COMT RNA abundance across polysome metafractions
 comt_pp2_rtqpcr_dt<- fread(paste(
-  comt_pp_dir, "IH_22JUL2021_COMT_vec_val_tr2_pp_tr2_qPCR_tidy.csv",
-  sep="/"),sep=",")
+  comt_pp_dir, "IH_22JUL2021_COMT_vec_val_tr2_pp_tr2_qPCR_tidy.csv", sep="/"),sep=",")
 
 comt_pp2_rtqpcr_dt[,Metafraction:=as.factor(Metafraction)]
 
@@ -1202,14 +934,63 @@ t.test(comt_pp2_rtqpcr_dt[Metafraction==5 & Construct_short=="natUTR5", log2(dCt
 
 ```
 
-The UTR5 del construct is less engaged with 80S to 7-somes, but more engaged with the heavy polysomes (without synthetic spike-in normalization: see comment below). The overall decrease in COMT RNA in metafractions 2-4 compared to metafractions 1 and 5 agrees with the lower mRNA abundance observed in RT-qPCR results total RNA. 
 
-However, when normalizing COMT signal to synthetic spike-in RNA signal, the increase for the UTR5 del in metafraction 5 (heavy polysomes) disappears. This suggests that observed difference in this metafraction may be due to differences in extraction efficiency.
+# TrIP-seq polysome profiling data for COMT
 
-Thus, the only consistent trend is lower COMT mRNA in monosome to 7-some fractions.
+```{r COMT TrIP-seq polysome profiling}
+
+tripseq_gene_dt<- fread(paste(
+  tripseq_dir, "GSE69352_tripseq_gene_tpm_ensembl_v75.csv", sep="/"), sep=",")
+
+tripseq_gene_melt_dt<- melt(
+  data=tripseq_gene_dt, id.vars=c("gene_name", "gene_id", "gene_biotype"), 
+  value.name="TPM", variable.name="Fraction")
+
+tripseq_gene_melt_dt[,Fraction_base:=sapply(strsplit(as.character(Fraction), "_"), head, 1)]
+tripseq_gene_melt_dt[,Fraction_base:=as.factor(Fraction_base)]
+
+tripseq_gene_melt_comt_dt<- tripseq_gene_melt_dt[gene_name=="COMT"]
+
+tripseq_gene_melt_comt_dt[,Ribo_num:=substr(Fraction_base,5,5)]
+tripseq_gene_melt_comt_dt[Fraction_base=="cyto", Ribo_num:=0]
+tripseq_gene_melt_comt_dt[Fraction_base=="80S", Ribo_num:=1]
+tripseq_gene_melt_comt_dt[,Ribo_num:=as.integer(Ribo_num)]
+
+tripseq_gene_melt_comt_gg<- ggplot(
+  data=tripseq_gene_melt_comt_dt, 
+  aes(x=Ribo_num, y=TPM))
+
+tripseq_gene_melt_comt_gg+
+  geom_point(size=2)+
+  geom_smooth(se=FALSE)+
+  scale_x_continuous(breaks=seq(0,8))+
+  labs(x="Fraction", y="TPM")+
+  theme_cowplot()
+
+# Summarize replicates
+tripseq_gene_melt_comt_summ_dt<- tripseq_gene_melt_comt_dt[,.(Mean_TPM=mean(TPM), SD_TPM=sd(TPM)), by=.(Fraction_base)]
+
+tripseq_gene_melt_comt_summ_dt[,Fraction_base:=factor(
+  Fraction_base, levels=c("cyto", "80S", "poly2", "poly3", "poly4", "poly5", "poly6", "poly7", "poly8"))]
+
+tripseq_gene_melt_comt_gg<- ggplot(
+  data=tripseq_gene_melt_comt_summ_dt, 
+  aes(x=Fraction_base, y=Mean_TPM, 
+      ymax=Mean_TPM+SD_TPM, 
+      ymin=Mean_TPM-SD_TPM))
+
+tripseq_gene_melt_comt_gg+
+  geom_bar(stat="identity", fill="steelblue")+
+  geom_errorbar(col="grey", width=0.2)+
+  labs(x="Fraction", y="Mean TPM +/- SD")+
+  theme_cowplot()
+
+rm(tripseq_gene_melt_comt_gg)
+
+```
 
 
-# UTR5 mutants
+# 5' UTR mutants
 
 ```{r COMT UTR5 mutants}
 
@@ -1245,13 +1026,11 @@ comt_utr5_mutants_gg+
   scale_color_brewer(palette="Set1")+
   theme_cowplot()
 
+rm(comt_utr5_mutants_gg)
+
 # Protein abundance
-comt_utr5_mutant_list_all_dt[,median(log10(`GFP-A`), na.rm=TRUE), by=.(Sample)]
-# uORF_A: (10^3.691297)/(10^3.694595)
-# uORF_B: (10^3.998965)/(10^3.694595)
-# uORF_B_restore: (10^4.100805)/(10^3.694595)
-# Flag_del: (10^4.195139)/(10^3.694595)
-# PCBP_del: (10^3.826845)/(10^3.694595)
+comt_utr5_mutant_list_all_median_gfp_dt<- comt_utr5_mutant_list_all_dt[,median(log10(`GFP-A`), na.rm=TRUE), by=.(Sample)]
+comt_utr5_mutant_list_all_median_gfp_dt[,FC:=(10^V1)/(10^3.694595)]
 
 comt_utr5_mutant_list_all_dt[Sample%in%c("WT", "uORF_A"), wilcox.test(log10(`GFP-A`)~Sample, na.option=na.omit)]
 comt_utr5_mutant_list_all_dt[Sample%in%c("WT", "uORF_B"), wilcox.test(log10(`GFP-A`)~Sample, na.option=na.omit)]
@@ -1262,12 +1041,8 @@ comt_utr5_mutant_list_all_dt[Sample%in%c("WT", "PCBP_del"), wilcox.test(log10(`G
 # All except uORF_A were significant
 
 # RNA abundance
-comt_utr5_mutant_list_all_dt[,median(log10(`DsRed-A`), na.rm=TRUE), by=.(Sample)]
-# uORF_A: (10^3.846602)/(10^3.861384)
-# uORF_B: (10^3.872886)/(10^3.861384)
-# uORF_B_restore: (10^3.985646)/(10^3.861384)
-# Flag_del: (10^3.950203)/(10^3.861384)
-# PCBP_del: (10^3.953305)/(10^3.861384)
+comt_utr5_mutant_list_all_median_mcherry_dt<- comt_utr5_mutant_list_all_dt[,median(log10(`DsRed-A`), na.rm=TRUE), by=.(Sample)]
+comt_utr5_mutant_list_all_median_mcherry_dt[,FC:=(10^V1)/(10^3.861384)]
 
 comt_utr5_mutant_list_all_dt[Sample%in%c("WT", "uORF_A"), wilcox.test(log10(`DsRed-A`)~Sample, na.option=na.omit)]
 comt_utr5_mutant_list_all_dt[Sample%in%c("WT", "uORF_B"), wilcox.test(log10(`DsRed-A`)~Sample, na.option=na.omit)]
@@ -1275,20 +1050,34 @@ comt_utr5_mutant_list_all_dt[Sample%in%c("WT", "uORF_B_restore"), wilcox.test(lo
 comt_utr5_mutant_list_all_dt[Sample%in%c("WT", "Flag_del"), wilcox.test(log10(`DsRed-A`)~Sample, na.option=na.omit)]
 comt_utr5_mutant_list_all_dt[Sample%in%c("WT", "PCBP_del"), wilcox.test(log10(`DsRed-A`)~Sample, na.option=na.omit)]
 
+comt_utr5_mutant_list_all_median_fc_dt<- rbind(comt_utr5_mutant_list_all_median_gfp_dt, comt_utr5_mutant_list_all_median_mcherry_dt)
+comt_utr5_mutant_list_all_median_fc_dt[,Fluor:=as.factor(rep(c("moxGFP", "mCherry"), each=6))]
 
+comt_utr5_mutant_list_all_median_fc_dt[,Sample:=factor(Sample, levels=c("WT", "uORF_A", "uORF_B", "uORF_B_restore", "Flag_del", "PCBP_del"))]
 
+comt_utr5_mutants_fc_gg<- ggplot(
+  data=comt_utr5_mutant_list_all_median_fc_dt, 
+  aes(x=Sample, y=FC, fill=Fluor))
 
+comt_utr5_mutants_fc_gg+
+  geom_hline(yintercept=1, col="grey", linetype=2)+
+  geom_bar(stat="identity", position="dodge", alpha=0.75)+
+  scale_y_continuous(breaks=seq(0,3.5,0.5))+
+  scale_fill_nejm()+
+  labs(x="", y="Fold change of median fluorescence")+
+  theme_cowplot()+
+  theme(axis.text.x=element_text(angle=90))
 
 ```
 
 
-# UTR5-Flag-COMT-moxGFP ribosome profiling
-
-In this experiment, cells were treated with both CHX and ANS at 100 µg/mL. Both conventional and targeted (i.e. selective) ribosome profiling against the Flag tag were performed. For targeted RP two conditions were used: 100 µL and 400 µL Agarose M2 anti-Flag beads in pulldown.
+# COMT ribosome profiling
 
 ```{r COMT convential and targeted RP}
 
-trp_trial4_ribofile<- Ribo(paste(comt_rp_dir, "riboflow_output", "ribo", "all.ribo", sep="/"))
+# In this experiment, cells were treated with both CHX and ANS at 100 µg/mL. Both conventional and targeted (i.e. selective) ribosome profiling against the Flag tag were performed. For targeted RP two conditions were used: 100 µL and 400 µL Agarose M2 anti-Flag beads in pulldown.
+
+trp_trial4_ribofile<- Ribo(paste(comt_rp_dir, "20210607_COMT.ribo", sep="/"))
 
 reads_post_dedup<- experiment_info(trp_trial4_ribofile)$total.reads
 names(reads_post_dedup)<- experiment_info(trp_trial4_ribofile)$experiment
@@ -1316,8 +1105,7 @@ max_rpf_len<- 35
 
 ```
 
-
-```{r T-RP trial 4 QC}
+```{r RP QC}
 
 region.counts<- get_length_distribution(
   ribo.object=trp_trial4_ribofile,
@@ -1387,8 +1175,7 @@ rm(comt_coverage_cds_nonzero_gg)
 
 ```
 
-
-```{r T-RP trial 4 COMT expression}
+```{r RP COMT expression}
 
 control_ref_names<- sort(reference_names[grepl("ACTB-217|CHMP2A-206|GAPDH-205|GPI-201|OAZ1-211|PSMB2-201|VCP-201", reference_names)])
 
@@ -1469,8 +1256,7 @@ rm(comt_expr_gg)
 
 ```
 
-
-```{r COMT coverage}
+```{r RP COMT coverage}
 
 comt_cov_by_pos_dt<- all_coverage_dt[Gene=="COMT",]
 comt_cov_by_pos_dt[,Reads_post_dedup:=rep(reads_post_dedup, nrow(comt_cov_by_pos_dt)/3)]
@@ -1600,10 +1386,8 @@ rm(comt_cov_rna_hotspot_gg)
 
 ```
 
+```{r RP COMT coverage in UTR5}
 
-```{r COMT coverage in UTR5}
-
-# comt_reference_name
 uorf_a_pos<- 178  # GCTTTG[CTG]CCG
 uorf_b_pos<- 224  # AGAGGG[CTG]GAG
 comt_membrane_start<- comt_cds_start  # TTGAAG[ATG]GAC
@@ -1743,57 +1527,6 @@ rm(comt_cov_by_pos_mcherry_gg)
 
 # IRES-mCherry, translation initiation likely starts just upstream of the start codon
 
-
-# This peak corresponds to uORF_A signal
-first_peak_pos<- 131
-
-# comt_cov_by_pos_zoom_dt[position%in%seq(uorf_a_pos-8,uorf_a_pos+8),]
-# This peak corresponds to uORF_B signal
-second_peak_pos<- 183  # seq(177,188)
-
-# comt_cov_by_pos_zoom_dt[position%in%seq(uorf_b_pos-8,uorf_b_pos+8),]
-# This peak corresponds to memORF signal
-third_peak_pos<- 220  # seq(217,223)
-
-# comt_cov_by_pos_zoom_dt[position%in%seq(comt_cytosolic_start-8,comt_cytosolic_start+8),]
-# This peak corresponds to cytoORF signal
-fourth_peak_pos<- 426  # seq(424,427)
-
-#comt_cov_by_pos_zoom_dt[position%in%seq(uorf_a_pos-8,uorf_a_pos+8),]
-fifth_peak_pos<- 493  # seq(493,497)
-
-# Where are the local peaks relative to the starts?
-
-# uorf_a_pos - first_peak_pos
-# 47 nt suggests a disome with leading ribosome having an open A site
-
-# uorf_b_pos - second_peak_pos
-# 39-42 nt length is too long for a single ribosome
-# and is slightly too short for a disome with open A site
-
-# comt_membrane_start - third_peak_pos
-# 32 nt is the length of a single ribosome footprint
-# this is inconsistent with a ~15 bp P-site offset
-# and inconsistent with a disome with leading ribosome having open A site
-
-# comt_cytosolic_start - fourth_peak_pos
-# 0 nt indicates this peak is not reflecting the membrane start signal
-# could this be due to the out-of-frame downstream ATG?
-
-# comt_oof_downstream_start - fourth_peak_pos
-# 46 nt length suggests disome with leading ribosome having open A site
-
-# Does the first in-frame downstream ATG line up with the fifth peak?
-# comt_downstream_start - fifth_peak_pos
-# 50 nt 
-# However, if using the max position for this peak region (pos 497)
-# the length is 46 nt, suggesting the fifth peak may be due to 
-# initiation at the downstream in-frame ATG
-
-# 20210607-FlagCOMT-400uL
-# 20210607-FlagCOMT-100uL
-# 20210607-conventional
-
 ```
 
 
@@ -1878,7 +1611,6 @@ comt_roi1_6_gg+
 
 ```
 
-
 ```{r COMT ROI_1 polysome profiling trial 2}
 
 comt_roi1_1<- fread(paste(comt_pp_roi1_trial2_dir, "IH_24SEP2021_COMT_ROI1_trial2_pp_1.csv",sep="/"),sep=",")
@@ -1957,7 +1689,6 @@ comt_roi1_6_gg+
 
 
 ```
-
 
 ```{r COMT ROI_1 polysome profiling trial 3}
 
@@ -2038,8 +1769,13 @@ comt_roi1_6_gg+
 
 ```
 
-
 ```{r COMT ROI_1,2 polysome profiling trial 4}
+
+# Metafraction pooling:
+# F1: 1-6, 100 µL water
+# F2: 7-12, 100 µL water
+# F3: 13-18, 100 µL water
+# F4: 19-23, 150 µL water
 
 comt_roi1_1<- fread(paste(comt_pp_roi1_trial4_dir, "SR_IH_1_07JUL2022.csv",sep="/"),sep=",")
 comt_roi1_2<- fread(paste(comt_pp_roi1_trial4_dir, "SR_IH_2_07JUL2022.csv",sep="/"),sep=",")
@@ -2093,14 +1829,13 @@ comt_roi2_2_gg+
 
 ```
 
-Metafraction pooling:
-M1: 1-6, 100 µL water
-M2: 7-12, 100 µL water
-M3: 13-18, 100 µL water
-M4: 19-23, 150 µL water
-
-
 ```{r COMT ROI_1,2 polysome profiling trial 5}
+
+# Metafraction pooling:
+# F1: 1-5, 150 µL water
+# F2: 6-12, 50 µL water
+# F3: 13-18, 150 µL water
+# F4: 19-23, 150 µL water
 
 comt_roi1_c<- fread(paste(comt_pp_roi_trial5_dir, "IH_12JUL2022_COMT_ROI_1_2_trial5_1.csv",sep="/"),sep=",")
 
@@ -2184,13 +1919,13 @@ comt_roi2_b_gg+
 
 ```
 
-Metafraction pooling:
-M1: 1-5, 150 µL water
-M2: 6-12, 50 µL water
-M3: 13-18, 150 µL water
-M4: 19-23, 150 µL water
-
 ```{r COMT ROI_1,2 polysome profiling trial 6}
+
+# Metafraction pooling:
+# F1: 1-6, 100 µL water
+# F2: 7-12, 100 µL water
+# F3: 13-18, 100 µL water
+# F4: 19-24, 100 µL water
 
 comt_roi1_c<- fread(paste(comt_pp_roi_trial6_dir, "IH_22JUL2022_COMT_ROI_1_2_trial6_1.csv",sep="/"),sep=",")
 
@@ -2256,19 +1991,8 @@ comt_roi2_c_gg+
 
 ```
 
-Metafraction pooling:
-M1: 1-6, 100 µL water
-M2: 7-12, 100 µL water
-M3: 13-18, 100 µL water
-M4: 19-24, 100 µL water
-
 
 # COMT multiplexed assay data pre-processing
-
-COMT_02DEC2021: polysome profiling trial 3
-COMT_15AUG2022: FACS trials 1, 2
-COMT_03NOV2022: polysome profiling trial 4-6 aggregate
-COMT_18FEB2023: FACS trial 3, trial 2 repeat
 
 ```{r COMT library yields}
 
@@ -2286,8 +2010,12 @@ comt_lib_yield_gg+
   
 ```
 
-
 ```{r COMT ROI_1 and ROI_2 gDNA, total cDNA, polysomal cDNA, FACS-sorted gDNA sequencing}
+
+# COMT_02DEC2021: polysome profiling trial 3
+# COMT_15AUG2022: FACS trials 1, 2
+# COMT_03NOV2022: polysome profiling trials 4-6
+# COMT_18FEB2023: FACS trial 3, trial 2 repeat
 
 log10_caf_thresh<- (-5.8)
 
@@ -2428,7 +2156,6 @@ comt_all_dt[, VAR_ID:=paste(`#CHROM`, POS, REF, ALT, sep=":")]
 comt_failed_libraries<- paste("COMT", c(seq(70,85), 147, 148), "R", sep="_")
 
 ```
-
 
 ```{r COMT ROI_1, ROI_2 gDNA and total and polysomal RNA sequencing variant filtering, batch correction, and rep. summarization}
 
@@ -2604,9 +2331,6 @@ comt_all_roi1_prep_fp_varids<- comt_all_roi1_prep_fp_counts_snp_dt[N>=4, VAR_ID]
 rm(comt_all_roi1_dt)
 
 # comt_all_roi1_prep_fp_counts_dt[VAR_ID%in%comt_all_roi1_prep_fp_varids, table(TYPE)]/nrow(comt_all_roi1_prep_fp_counts_dt)
-
-# For some reason most of the predicted false positives are MNPs
-# require refactor of TYPE level?
 
 caf_by_predict_gg<- ggplot(
   data=comt_all_roi1_prep_dt, 
@@ -2991,7 +2715,7 @@ comt_all_filt_postprocess_subtract_drop_cast_poly_roi1_dt<- dcast(
     ROI=="ROI_1" & Input_clean=="Poly" & Fraction%in%c(3,4)],
   formula=VAR_ID~Key_verbose, value.var="log_NORM_CAF")
 
-comt_all_filt_postprocess_subtract_drop_cast_poly_roi2_dt<- dcast(
+comt_all_filt_postprocess_subtract_drop_cast_poly_roi2_dt <- dcast(
   data=comt_all_filt_postprocess_subtract_drop_dt[
     ROI=="ROI_2" & Input_clean=="Poly" & Fraction%in%c(2,3,4)],
   formula=VAR_ID~Key_verbose, value.var="log_NORM_CAF")
@@ -3171,54 +2895,7 @@ comt_all_filt_postprocess_subtract_drop_cast_combat_bio_dt[Input=="FACS", Key:=p
 
 ```
 
-
-```{r Coverage of each codon and amino acid}
-
-# Amino acids changes
-comt_aa_cov_dt<- comt_all_filt_postprocess_subtract_drop_dt[
-  !grepl(",", AA_POS), .(N=length(unique(AA_CHANGE))), by=.(Input, AA_POS)]
-
-comt_aa_cov_dt[,AA_POS:=as.integer(AA_POS)]
-
-comt_aa_cov_gg<- ggplot(
-  data=comt_aa_cov_dt[Input!="Input_library"], 
-  aes(x=AA_POS, y=N))
-
-comt_aa_cov_gg+
-  facet_wrap(~Input)+
-  geom_point()+
-  geom_line()+
-  expand_limits(y=0)+
-  labs(x="Amino acid position", 
-       y="Number amino acid changes")+
-  theme_cowplot()
-
-# Codon changes
-comt_codon_cov_dt<- comt_all_filt_postprocess_subtract_drop_dt[
-  !grepl(",", AA_POS), .(N=length(unique(ALT_CODON))), by=.(Input, AA_POS)]
-
-comt_codon_cov_dt[,AA_POS:=as.integer(AA_POS)]
-
-comt_codon_cov_gg<- ggplot(
-  data=comt_codon_cov_dt[Input!="Input_library"], 
-  aes(x=AA_POS, y=N))
-
-comt_codon_cov_gg+
-  facet_wrap(~Input)+
-  geom_hline(yintercept=62, col="grey", linetype=2)+
-  geom_point()+
-  geom_line()+
-  expand_limits(y=0)+
-  labs(x="Amino acid position", 
-       y="Number codon changes")+
-  theme_cowplot()
-
-rm(list=c("comt_aa_cov_gg", "comt_codon_cov_gg"))
-
-```
-
-
-```{r Variant frequency distr}
+```{r Variant frequency distribution}
 
 # gDNA, cDNA CAF
 comt_rep_summ_freq_gg<- ggplot(
@@ -3230,6 +2907,8 @@ comt_rep_summ_freq_gg+
   facet_wrap(ROI~TYPE)+
   theme_cowplot()+
   labs(y="Median log10 frequency")
+
+rm(comt_rep_summ_freq_gg)
 
 
 # cDNA, poly CAF
@@ -3243,12 +2922,12 @@ comt_rep_summ_freq_gg+
   theme_cowplot()+
   labs(y="Median log10 frequency")
 
+rm(comt_rep_summ_freq_gg)
+
 ```
 
 
 ## Replicate reproducibility
-
-Use scatterplots and hierarchical clustering to determine reproducibility of gDNA, cDNA, and polysome libraries.
 
 ```{r COMT replicate correlation pairwise}
 
@@ -3712,7 +3391,6 @@ roi2_q3_bio_rep_cors<- c(.055, .551, .513, .726, .186, .280, .116, .861, .732, .
 
 ```
 
-
 ```{r COMT replicate correlation pairwise after biological summarization}
 
 comt_rep_summ_cast_dt<- dcast(
@@ -3756,14 +3434,16 @@ comt_counts_by_varid_dt<- comt_counts_by_key_varid_dt[N==4, .N, by=.(VAR_ID)]
 #comt_counts_by_varid_dt[N==7, length(unique(VAR_ID))] / comt_counts_by_varid_dt[,length(unique(VAR_ID))]
 # 96% of variants found in all biological replicates and gDNA, RNA, Poly.3, Poly.4, FACS.1, FACS.2, and FACS.3
 
-rm(list=c("comt_counts_by_keybio_varid_dt", "comt_counts_by_key_varid_dt"))
+#rm(list=c("comt_counts_by_keybio_varid_dt", "comt_counts_by_key_varid_dt"))
 
 # How many variants were found in at least one biological replicate for all layers?
 #comt_all_filt_postprocess_subtract_drop_cast_combat_bio_dt[,length(unique(VAR_ID))]
 #table(comt_all_filt_postprocess_subtract_drop_cast_combat_bio_dt[!Key%in%comt_bio_drop_keys, .N,by=.(VAR_ID)]$N)
 
-```
+# Count ROI_1 vs ROI_2 variants found in all bio reps and above readouts
+# comt_all_filt_postprocess_subtract_drop_cast_combat_bio_dt[VAR_ID%in%comt_counts_by_varid_dt[N==7, VAR_ID], length(unique(VAR_ID)), by=.(ROI)]
 
+```
 
 ```{r Input correlation heatmap}
 
@@ -3802,7 +3482,7 @@ rm(comt_rep_summ_cast_mat_cor_melt_gg)
 
 # Variants with differential mRNA abundance
 
-```{r COMT RNA limma-trend}
+```{r COMT RNA limma}
 
 rna_fdr_thresh<- 0.01
 loose_fdr_thresh<- 0.05
@@ -3829,8 +3509,6 @@ comt_rna_limma_input_cast_mat<- as.matrix(
   comt_rna_limma_input_cast_dt[,-c("VAR_ID")])
 
 rownames(comt_rna_limma_input_cast_mat)<- comt_rna_limma_input_cast_dt[,VAR_ID]
-
-#comt_rna_limma_input_cast_mat<- normalizeQuantiles(comt_rna_limma_input_cast_mat)
 
 comt_rna_limma_input_cast_eset<- Biobase::ExpressionSet(
   assayData=comt_rna_limma_input_cast_mat)
@@ -4003,18 +3681,6 @@ rm(comt_rna_limma_sig_gg)
 # Annotate the limma dataset
 comt_rna_limma_input_cast_eset_fit_eb_all_merge_dt<- merge(
   comt_rna_limma_input_cast_eset_fit_eb_all_dt, annot_dt, by="VAR_ID")
-
-# Validation variants
-comt_cdna_val_var_ids<- c("p.M51L"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4827:ATG:CTC",
-                          "p.M152T"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:5131:TG:CT",
-                          "p.S74H"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4896:AG:CA",
-                          "p.S74L"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4896:AGC:CTA",
-                          "p.H62R"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4861:AC:GG",
-                          "p.V63F"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4863:GTG:TTT",
-                          "p.L64C"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4866:CTG:TGT",
-                          "p.E56R"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4842:GAG:CGT",
-                          "p.V63V"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4865:G:C",
-                          "p.N71*"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4887:AAC:TAG")
 
 ```
 
@@ -4468,9 +4134,6 @@ comt_rna_aldex2_sig_gg+
 rm(comt_rna_aldex2_sig_gg)
 
 
-comt_rna_input_cast_mat_cpm_iqlr_melt_dt
-
-
 # Generate a VE map using ALDEx2
 comt_rna_aldex_rep_summ_ve_dt<- comt_rna_input_cast_mat_cpm_aldex_merge_dt[
   !grepl(",", AA_CHANGE), .(Median_effect=median(effect, na.rm=T),
@@ -4505,7 +4168,7 @@ rm(comt_rna_aldex_ve_gg)
 
 ```
 
-```{r COMT RNA limma-trend VE maps}
+```{r COMT RNA limma VE maps}
 
 comt_rep_summ_ve_dt<- comt_rna_limma_input_cast_eset_fit_eb_all_merge_dt[
   !grepl(",", AA_CHANGE), .(Median_log_FC=median(logFC, na.rm=T)), 
@@ -4557,187 +4220,101 @@ rm(comt_ve_heatmap_roi2_gg)
 
 ```
 
-```{r Silent versus nonsense and missense mutations}
+```{r ALDEx2 versus limma effect comparison}
 
-comt_roi_silent_missense_nonsense_gg<- ggplot(
-  data=comt_rep_summ_ve_dt, 
-  aes(x=VAR_TYPE, y=Median_log_FC))
+aldex_vs_limma_rna_dt<- merge(
+  comt_rna_input_cast_mat_cpm_aldex_dt[,.(VAR_ID, effect, diff.btw, we.eBH)],
+  comt_rna_limma_input_cast_eset_fit_eb_all_merge_dt[,.(ROI, VAR_TYPE, VAR_ID, ID_SHORT, AA_CHANGE, logFC, adj.P.Val)], by="VAR_ID")
 
-comt_roi_silent_missense_nonsense_gg+
-  facet_wrap(~ROI)+
-  geom_hline(yintercept=0, col="grey", linetype=2)+
-  geom_boxplot(fill="steelblue", alpha=0.75, width=0.5, outlier.shape=NA)+
-  labs(x="Mutation type", y="Median log FC")+
+var_type_cols<- c("magenta", "cyan3", "firebrick")
+
+aldex_vs_limma_examples<- c("4865:G:C:p.V63V", "5131:TG:CT:p.M152T", "4861:AC:GG:p.H62R", 
+                            "4861:A:T:p.H62L", "4860:C:T:p.H62Y", "4860:CA:TT:p.H62F", "4863:GTG:CTC:p.V63L")
+
+aldex_vs_limma_rna_dt[ID_SHORT%in%aldex_vs_limma_examples, Label:=AA_CHANGE]
+
+aldex_vs_limma_rna_gg<- ggplot(
+  data=aldex_vs_limma_rna_dt[we.eBH < comt_rna_fdr_thresh | adj.P.Val < rna_fdr_thresh], 
+  aes(x=diff.btw, y=logFC, col=VAR_TYPE))
+
+aldex_vs_limma_rna_gg+
+  geom_point()+
+  geom_text_repel(aes(label=Label), col="black", nudge_y=0.5)+
+  scale_color_manual(values=var_type_cols)+
+  labs(x="ALDEx2 log FC", y="limma log FC")+
   theme_cowplot()
 
-t.test(Median_log_FC~ROI, data=comt_rep_summ_ve_dt[VAR_TYPE=="Silent"])
-t.test(Median_log_FC~ROI, data=comt_rep_summ_ve_dt[VAR_TYPE=="Missense"])
+aldex_vs_limma_rna_gg<- ggplot(
+  data=aldex_vs_limma_rna_dt[we.eBH < comt_rna_fdr_thresh | adj.P.Val < rna_fdr_thresh], 
+  aes(x=effect, y=logFC, col=VAR_TYPE))
 
-# ALDEx2
+aldex_vs_limma_rna_gg+
+  geom_point()+
+  geom_text_repel(aes(label=Label), col="black", nudge_y=0.5)+
+  scale_color_manual(values=var_type_cols)+
+  labs(x="ALDEx2 effect size", y="limma log FC")+
+  theme_cowplot()
+
+rm(aldex_vs_limma_rna_gg)
+
+# Standardization in the effect size reduces correlation, but both still high
+#aldex_vs_limma_rna_dt[we.eBH < comt_rna_fdr_thresh | adj.P.Val < rna_fdr_thresh, cor(diff.btw, logFC)]
+#aldex_vs_limma_rna_dt[we.eBH < comt_rna_fdr_thresh | adj.P.Val < rna_fdr_thresh, cor(effect, logFC)]
+#aldex_vs_limma_rna_dt[we.eBH < comt_rna_fdr_thresh | adj.P.Val < rna_fdr_thresh, cor(effect, logFC, method="spearman")]
+
+# Use same FDR cutoff to compare ALDEx2 effect size with limma FC
+#aldex_vs_limma_rna_dt[we.eBH < comt_rna_fdr_thresh | adj.P.Val < comt_rna_fdr_thresh, cor(effect, logFC, method="pearson")]
+#aldex_vs_limma_rna_dt[we.eBH < comt_rna_fdr_thresh | adj.P.Val < comt_rna_fdr_thresh, cor(effect, logFC, method="spearman")]
+
+# What proportion of variants in ALDEx2 analysis did limma recover?
+
+comt_rna_input_cast_mat_cpm_aldex_sig_varids<- comt_rna_input_cast_mat_cpm_aldex_merge_dt[
+  we.eBH<comt_rna_fdr_thresh & Direction!="N.S.", VAR_ID]
+
+#comt_rna_limma_input_cast_eset_fit_eb_all_merge_dt[adj.P.Val<comt_rna_fdr_thresh & VAR_ID%in%comt_rna_input_cast_mat_cpm_aldex_sig_varids, .N] / length(comt_rna_input_cast_mat_cpm_aldex_sig_varids)
+
+
+```
+
+```{r Silent versus nonsense and missense mutations}
+
+# limma
 comt_roi_silent_missense_nonsense_gg<- ggplot(
-  data=comt_rna_aldex_rep_summ_ve_dt, 
-  aes(x=VAR_TYPE, y=Median_diff, fill=ROI))
+  data=comt_rep_summ_ve_dt, 
+  aes(x=VAR_TYPE, y=Median_log_FC, fill=ROI))
 
 comt_roi_silent_missense_nonsense_gg+
   geom_hline(yintercept=0, col="grey", linetype=2)+
   geom_boxplot(alpha=0.75, width=0.5, outlier.shape=NA)+
   scale_fill_manual(values=roi_cols)+
-  labs(x="Mutation type", y="Median difference")+
+  labs(x="Mutation type", y="Median log FC")+
   theme_cowplot()
 
-t.test(Median_diff~ROI, data=comt_rna_aldex_rep_summ_ve_dt[VAR_TYPE=="Silent"])
-t.test(Median_diff~ROI, data=comt_rna_aldex_rep_summ_ve_dt[VAR_TYPE=="Missense"])
-t.test(Median_diff~ROI, data=comt_rna_aldex_rep_summ_ve_dt[VAR_TYPE=="Nonsense"])
+wilcox.test(Median_log_FC~ROI, data=comt_rep_summ_ve_dt[VAR_TYPE=="Silent"])
+wilcox.test(Median_log_FC~ROI, data=comt_rep_summ_ve_dt[VAR_TYPE=="Missense"])
 
-```
+# ALDEx2
+comt_roi_silent_missense_nonsense_gg<- ggplot(
+  data=comt_rna_aldex_rep_summ_ve_dt, 
+  aes(x=VAR_TYPE, y=Median_effect, fill=ROI))
 
-
-## H62-V63 hotspot 
-
-CAC-GUG-CUG-CAG-CAU
-H-V-L-Q-H
-N-O-O-M-N (N:nonoptimal, O:optimal, M:mid)
-
-While the histidine codons are not optimal (especially CAU), the GUG and CUG codons for V, L are highly optimal. Thus, mutations away from these optimal codons are unlikely to lead to higher mRNA abundance through codon optimality.
-
-Looking at where these residues reside on the cytosolic protein isoform, they are within the first alpha helix, distant from the AdoMet and catecholamine binding sites:
-https://www.rcsb.org/3d-view/3BWM
-
-CAC-GUG is not an inhibitory dicodon in yeast. GUG-CUG is not either, but these codons are found among several inhibitory dicodon pairs. 
-
-
-## DeMaSk comparison
-
-See https://demask.princeton.edu/about/
-
-```{r DeMaSk comparison}
-
-demask_file<- paste(demask_dir, "dc59eaf2256a3e939635.txt", sep="/")
-demask_dt<- fread(demask_file, sep="\t")
-demask_dt[,AA_CHANGE:=paste("p.", WT, pos, var, sep="")]
-
-# Merge with RNA abundance data
-comt_rna_input_cast_mat_cpm_aldex_merge_demask_dt<- merge(
-  comt_rna_input_cast_mat_cpm_aldex_merge_dt, 
-  demask_dt[,.(AA_CHANGE, score, entropy, log2f_var, matrix)], by="AA_CHANGE")
-
-# Determine if variants that are down show lesser scores than RNA up variants
-demask_gg<- ggplot(
-  data=comt_rna_input_cast_mat_cpm_aldex_merge_demask_dt,
-  aes(x=Direction, y=score))
-
-demask_gg+
-  geom_boxplot(width=0.5, fill="steelblue", alpha=0.75)+
-  labs(x="", y="DeMaSk score")+
+comt_roi_silent_missense_nonsense_gg+
+  geom_hline(yintercept=0, col="grey", linetype=2)+
+  geom_boxplot(alpha=0.75, width=0.5, outlier.shape=NA)+
+  scale_fill_manual(values=roi_cols)+
+  labs(x="Mutation type", y="Median effect size")+
   theme_cowplot()
 
-rm(demask_gg)
+wilcox.test(Median_effect~ROI, data=comt_rna_aldex_rep_summ_ve_dt[VAR_TYPE=="Silent"])
+wilcox.test(Median_effect~ROI, data=comt_rna_aldex_rep_summ_ve_dt[VAR_TYPE=="Missense"])
+wilcox.test(Median_effect~ROI, data=comt_rna_aldex_rep_summ_ve_dt[VAR_TYPE=="Nonsense"])
 
-#comt_rna_input_cast_mat_cpm_aldex_merge_demask_dt[Direction!="N.S.", t.test(score~Direction)]
-
-# The opposite of expectation is observed; would this hold if variants at the hotspot are removed? Yes
-#comt_rna_input_cast_mat_cpm_aldex_merge_demask_dt[Direction!="N.S." & !AA_POS2%in%c(62,63), t.test(score~Direction)]
-
-#quantile(demask_dt[,unique(entropy), by=.(pos)]$V1, probs=seq(0,1,0.1))
-# Use bottom 20th percentile to identify constrained positions
-demask_entropy_thresh<- 1.0779
-
-demask_low_entropy_pos<- demask_dt[entropy<demask_entropy_thresh, unique(pos)]
-
-# ROI_1 is codons 40-74 
-# ROI_2 is codons 136-158
-
-# Thus targeted codons with low entropy are 63, 67, 70-71, 140, 146, 156-157
-
-```
-
-There is no overall association between directionality of mRNA abundance effect and predicted impact on protein function using DeMaSk. However, V63 showed low entropy among homologs, suggesting it is an important conserved residue.
-
-
-## Density of variants by position
-
-Plot the density of variants by COMT transcript position to identify local hotspots of mRNA abundance dysregulation.
-
-```{r Variants by position}
-
-# Additionally plot changes to methionine, which may create
-# new alternative TIS start codons
-
-if("Label"%in%names(comt_rna_limma_input_cast_eset_fit_eb_all_merge_dt)){
-  comt_rna_limma_input_cast_eset_fit_eb_all_merge_dt[,Label:=NULL]
-}
-
-comt_rna_limma_input_cast_eset_fit_eb_all_merge_dt[abs(logFC)>0.35, Label:=AA_CHANGE]
-comt_rna_limma_input_cast_eset_fit_eb_all_merge_dt[,Label:=as.factor(Label)]
-
-mut_density_gg<- ggplot(
-  data=comt_rna_limma_input_cast_eset_fit_eb_all_merge_dt[
-    adj.P.Val < loose_fdr_thresh & VAR_TYPE!="Nonsense" & ROI=="ROI_1",], 
-  aes(x=AA_POS2, y=logFC, col=adj.P.Val, label=Label))
-
-mut_density_gg+
-  scale_y_continuous(breaks=seq(-0.5, 1, 0.5))+
-  scale_x_continuous(breaks=seq(40,157,5))+
-  geom_hline(yintercept=0, col="grey", linetype=2)+
-  scale_color_viridis(option="A", begin=0.9, end=0.1)+
-  geom_jitter(size=1.5, width=0.5)+
-  geom_text_repel(col="black")+
-  labs(x="Amino acid position", y="log FC, cDNA to gDNA", col="FDR")+
-  theme_cowplot()+
-  expand_limits(y=c(-.5,1))
-
-mut_density_gg<- ggplot(
-  data=comt_rna_limma_input_cast_eset_fit_eb_all_merge_dt[
-    adj.P.Val < loose_fdr_thresh & VAR_TYPE!="Nonsense",], 
-  aes(x=AA_POS2, y=logFC, col=adj.P.Val, label=Label))
-
-mut_density_gg+
-  facet_wrap(~ROI, scales="free_x")+
-  scale_y_continuous(breaks=seq(-0.5, 1, 0.5))+
-  geom_hline(yintercept=0, col="grey", linetype=2)+
-  scale_color_viridis(option="A", begin=0.9, end=0.1)+
-  geom_jitter(size=1.5, width=0.5)+
-  geom_text_repel(col="black")+
-  labs(x="Amino acid position", y="log FC, cDNA to gDNA", col="FDR")+
-  theme_cowplot()+
-  expand_limits(y=c(-.5,1))
-
-rm(mut_density_gg)
-
-```
-
-
-## Clinically relevant SNPs
-
-Determine if annotated clinically-relevant SNPs show differential mRNA abundance.
-
-ClinVar mutations are:
-K55K (G>A) is rs1601527185
-H62H (C>T) is rs4633
-A72S (G>T) is rs6267
-Q73Q (C>A) is rs740602
-E77E (G>A) is rs1601527383
-T81T (C>A) is rs1601527404
-
-```{r Clinically relevant SNPs}
-
-clinrel_var_ids<- c("rs4633", "rs4680", "rs4818", "rs6267", "rs74745580")
-
-# ROI_1
-#rs74745580: TGGAA[C>T]GAG; p.N39N, 499:C:T; not in mutagenesis region
-#rs4633: AACCA[C>T]GTG; p.H62H, 568:C:T
-#rs6267: AAC[G>T]CACAG; p.A72S, 596:G:T
-
-# ROI_2
-#rs4818: AGGCT[C>G]ATC; p.L136L, 5084:G:C
-#rs4680: GGC[G>A]TGAAG; p.V158M, 5148:G:A; forms a new TIS?; GGCGTGAAG > GGCATGAAG
+rm(comt_roi_silent_missense_nonsense_gg)
 
 ```
 
 
 ## Dicodons and dipeptides
-
-Determine if there are inhibitory or optimal codon pairs or dipeptides in the COMT ROIs.
 
 ```{r Dicodon pairs ALDEx2}
 
@@ -4856,146 +4433,7 @@ comt_rna_input_cast_mat_cpm_aldex_merge_dt[
 ```
 
 
-## Variants causing Kozak-like motifs
-
-```{r Variants that create Kozak-like sequences}
-
-kozak_canonical_file<- paste(kozak_dir, "Noderer_Wang_2014_FACS_seq_TIS_efficiency.txt", sep="/")
-
-kozak_noncanonical_file<- paste(kozak_dir, "nar-01911-h-2017-File009.txt", sep="/")
-
-tis_efficiency_dt<- fread(kozak_canonical_file, skip=1)
-noncanon_tis_efficiency_dt<- fread(kozak_noncanonical_file, skip=1)
-names(noncanon_tis_efficiency_dt)<- c("sequence", "efficiency")
-
-endogenous_mem_tis<- "UUGAAGAUGCC"
-flag_mem_tis<- "UUGAAGAUGGA"
-endogenous_cyto_tis<- "CUGCUCAUGGG"
-comt_tis_seqs<- c(endogenous_mem_tis, flag_mem_tis, endogenous_cyto_tis)
-
-# tis_efficiency_dt[sequence%in%comt_tis_seqs]
-# Membrane TIS has efficiency 81-83; Flag tag does not strongly alter efficiency
-# Cytoplasmic TIS has slightly higher efficiency at 86
-
-endogenous_cyto_tis_flush<- "CUGCUCAUGGGU"
-endogenous_cyto_tis_flush_split<- unlist(strsplit(endogenous_cyto_tis_flush, ""))
-
-# First look at the variants surrounding the alternative start codon for 
-# the cytoplasmic COMT isoform
-
-# For Noderer et al. 2014 exclude changes at the cyto TIS start codon
-comt_rna_input_cast_mat_cpm_aldex_merge_tis_dt<- comt_rna_input_cast_mat_cpm_aldex_merge_dt[
-  AA_POS2%in%c(49,50,52,150,151,153) & VAR_TYPE!="Nonsense"]
-
-get_kozak_efficiency<- function(var_id, input_dt, endo_tis, tis_efficiency_dt){
-  
-  endo_tis_copy<- copy(endo_tis)
-  var_id_aa_pos<- input_dt[VAR_ID==var_id, unique(as.integer(AA_POS2))]
-  var_id_alt_codon<- input_dt[VAR_ID==var_id, unique(ALT_CODON)]
-  var_id_alt_codon_split<- unlist(strsplit(var_id_alt_codon, ""))
-  
-  if(var_id_aa_pos == 49){
-    endo_tis_copy[1:3]<- var_id_alt_codon_split
-  } else if(var_id_aa_pos == 50){
-    endo_tis_copy[4:6]<- var_id_alt_codon_split
-  } else if(var_id_aa_pos == 51){
-    endo_tis_copy[7:9]<- var_id_alt_codon_split
-  } else if(var_id_aa_pos == 52){
-    endo_tis_copy[10:12]<- var_id_alt_codon_split
-  }
-  
-  endo_tis_copy_paste<- paste(endo_tis_copy[1:11], collapse="")
-  endo_tis_copy_paste<- gsub("T", "U", endo_tis_copy_paste)
-  tis_efficiency<- tis_efficiency_dt[sequence==endo_tis_copy_paste, efficiency]
-  return(tis_efficiency)
-}
-
-comt_rna_input_cast_mat_cpm_aldex_merge_tis_varids<- 
-  comt_rna_input_cast_mat_cpm_aldex_merge_tis_dt[,as.character(unique(VAR_ID))]
-
-comt_rna_input_cast_mat_cpm_aldex_merge_tis_efficiencies<- 
-  sapply(comt_rna_input_cast_mat_cpm_aldex_merge_tis_varids, get_kozak_efficiency,
-         comt_rna_input_cast_mat_cpm_aldex_merge_tis_dt, endogenous_cyto_tis_flush_split, 
-         tis_efficiency_dt)
-
-comt_rna_input_cast_mat_cpm_aldex_merge_tis_efficiencies_dt<- 
-  data.table(VAR_ID=comt_rna_input_cast_mat_cpm_aldex_merge_tis_varids, 
-             Kozak_efficiency=comt_rna_input_cast_mat_cpm_aldex_merge_tis_efficiencies)
-
-# Annotate the limma dataset with canonicalk Kozak efficiency
-comt_rna_input_cast_mat_cpm_aldex_merge_dt[
-  ,Kozak_efficiency:=comt_rna_input_cast_mat_cpm_aldex_merge_tis_efficiencies_dt[
-    match(comt_rna_input_cast_mat_cpm_aldex_merge_dt[,VAR_ID], VAR_ID), Kozak_efficiency]]
-
-kozak_efficiency_gg<- ggplot(
-  data=comt_rna_input_cast_mat_cpm_aldex_merge_dt[!is.na(Kozak_efficiency)], 
-  aes(x=effect, Kozak_efficiency))
-
-kozak_efficiency_gg+
-  geom_point(size=2)+
-  theme_cowplot()+
-  labs(y="Kozak efficiency")
-
-rm(kozak_efficiency_gg)
-
-# No clear relationship between cDNA abundance effect and TIS strength
-
-
-# Get noncanonical TIS efficiencies for changes at mutagenized methionine codons
-get_noncanon_kozak_efficiency<- function(var_id, input_dt, endo_tis, tis_efficiency_dt){
-  
-  endo_tis_copy<- copy(endo_tis)
-  var_id_aa_pos<- input_dt[VAR_ID==var_id, unique(as.integer(AA_POS2))]
-  var_id_alt_codon<- input_dt[VAR_ID==var_id, unique(ALT_CODON)]
-  var_id_alt_codon_split<- unlist(strsplit(var_id_alt_codon, ""))
-  endo_tis_copy[7:9]<- var_id_alt_codon_split
-  
-  endo_tis_copy_paste<- paste(endo_tis_copy[3:10], collapse="")
-  endo_tis_copy_paste<- gsub("T", "U", endo_tis_copy_paste)
-  tis_efficiency<- tis_efficiency_dt[sequence==endo_tis_copy_paste, efficiency]
-  return(tis_efficiency)
-}
-
-comt_rna_input_cast_mat_cpm_aldex_merge_tis_noncanon_dt<- comt_rna_input_cast_mat_cpm_aldex_merge_dt[
-  AA_POS2%in%c(49,50,52,150,151,153) & VAR_TYPE!="Nonsense"]
-
-comt_rna_input_cast_mat_cpm_aldex_merge_tis_noncanon_varids<- 
-  comt_rna_input_cast_mat_cpm_aldex_merge_tis_noncanon_dt[,as.character(unique(VAR_ID))]
-
-comt_rna_input_cast_mat_cpm_aldex_merge_tis_noncanon_efficiencies<- 
-  sapply(comt_rna_input_cast_mat_cpm_aldex_merge_tis_noncanon_varids, get_noncanon_kozak_efficiency,
-         comt_rna_input_cast_mat_cpm_aldex_merge_tis_noncanon_dt, endogenous_cyto_tis_flush_split, 
-         noncanon_tis_efficiency_dt)
-
-# Fill NAs for those variants not found in the noncanonical set
-is.na(comt_rna_input_cast_mat_cpm_aldex_merge_tis_noncanon_efficiencies)<- lengths(comt_rna_input_cast_mat_cpm_aldex_merge_tis_noncanon_efficiencies) == 0
-
-comt_rna_input_cast_mat_cpm_aldex_merge_tis_noncanon_efficiencies_dt<- 
-  data.table(VAR_ID=comt_rna_input_cast_mat_cpm_aldex_merge_tis_noncanon_varids, 
-             Kozak_efficiency=unlist(comt_rna_input_cast_mat_cpm_aldex_merge_tis_noncanon_efficiencies))
-
-comt_rna_input_cast_mat_cpm_aldex_merge_dt[
-  ,Noncanonical_Kozak_efficiency:=comt_rna_input_cast_mat_cpm_aldex_merge_tis_noncanon_efficiencies_dt[
-    match(comt_rna_input_cast_mat_cpm_aldex_merge_dt[,VAR_ID], VAR_ID), Kozak_efficiency]]
-
-kozak_efficiency_gg<- ggplot(
-  data=comt_rna_input_cast_mat_cpm_aldex_merge_dt[!is.na(Noncanonical_Kozak_efficiency)], 
-  aes(x=effect, Kozak_efficiency))
-
-kozak_efficiency_gg+
-  geom_point(size=2)+
-  theme_cowplot()+
-  labs(y="Noncanonical Kozak efficiency")
-
-rm(kozak_efficiency_gg)
-
-
-```
-
-
 ## tRNA abundance 
-
-Determine if there is a relationship between direction or magnitude of differential mRNA abundance and tRNA abundance. Further determine if tRNA abundance is more variable for RNA down versus RNA up variants.
 
 ```{r tRNA abundance by hydro-tRNAseq and mim-tRNAseq RNA limma}
 
@@ -5486,8 +4924,6 @@ levene.test(
 
 ## Codon stability coefficient
 
-Determine if there is a relationship between direction or magnitude of differential mRNA abundance and codon stability coeffienct (CSC). Compare codon stability for RNA up and RNA down groups using Wu et al. 2019 (Bazzini) and Narula et al. 2019 (Rissland) CSC data for HEK293T cells.
-
 ```{r CSC RNA limma}
 
 comt_all_limma_input_cast_eset_fit_eb_top_loose_varids<- 
@@ -5861,7 +5297,7 @@ csc_gg+
 
 ## Ribosome dwell time
 
-```{r Eichhorn 2014 Ribo-seq dwell time limma}
+```{r Narula 2019; Eichhorn 2014 Ribo-seq dwell time limma}
 
 # Determine if there associations with ribosome dwell time
 # using Narula et al. 2019 (from Eichhorn et al. 2014 Ribo-seq data)
@@ -5958,7 +5394,7 @@ psite_dwell_gg+
 
 ```
 
-```{r Eichhorn 2014 Ribo-seq dwell time ALDEx2}
+```{r Narula 2019; Eichhorn 2014 Ribo-seq dwell time ALDEx2}
 
 # Determine if there associations with ribosome dwell time
 # using Narula et al. 2019 (from Eichhorn et al. 2014 Ribo-seq data)
@@ -6058,10 +5494,11 @@ rm(psite_dwell_gg)
 
 ```
 
-```{r Wu 2019 Ribo-seq dwell time ALDEx2}
+```{r Wu and Green 2019 Ribo-seq dwell time ALDEx2}
+
+#  Wu and Green 2019 CHX+TIG 21 nt RFP normalized densities
 
 # Determine if there associations with ribosome dwell time
-# Wu and Green
 wu_dwell_time_21nt_dt<- fread(paste(
   codon_data_dir, "21ntRPF_occu.csv", sep="/"), sep=",", header=T)
 
@@ -6130,475 +5567,10 @@ rm(asite_dwell_gg)
 
 ```
 
-Comparison to Wu 2019 CHX+TIG 21 nt RFP normalized densities indicates an unexpected reverse trend to the Narula 2019 analysis (data from Eichhorn 2014).
-
-See also:
-
-Gobet et al. 2020: Robust landscapes of ribosome dwell times and aminoacyl-tRNAs in response to nutrient stress in liver
-
-Ingolia et al. 2011: Ribosome profiling of mouse embryonic stem cells reveals the complexity and dynamics of mammalian proteomes
-
-```{r CSC of native COMT coding sequence}
-
-flag_comt_moxgfp_cds<- "ATGGACTACAAAGACGATGACGACAAGccggaggccccgcctctgctgttggcagctgtgttgctgggcctggtgctgctggtggtgctgctgctgcttctgaggcactggggctggggcctgtgccttatcggctggaacgagttcatcctgcagcccatccacaacctgctcatgggtgacaccaaggagcagcgcatcctgaaccacgtgctgcagcatgcggagcccgggaacgcacagagcgtgctggaggccattgacacctactgcgagcagaaggagtgggccatgaacgtgggcgacaagaaaggcaagatcgtggacgccgtgattcaggagcaccagccctccgtgctgctggagctgggggcctactgtggctactcagctgtgcgcatggcccgcctgctgtcaccaggggcgaggctgatcaccatcgagatcaaccccgactgtgccgccatcacccagcggatggtggatttcgctggcgtgaaggacaaggtcacccttgtggttggagcgtcccaggacatcatcccccagctgaagaagaagtatgatgtggacacactggacatggtcttcctcgaccactggaaggaccggtacctgccggacacgcttctcttggaggaatgtggcctgctgcggaaggggacagtgctactggctgacaacgtgatctgcccaggtgcgccagacttcctagcacacgtgcgcgggagcagctgctttgagtgcacacactaccaatcgttcctggaatacagggaggtggtggacggcctggagaaggccatctacaagggcccaggcagcgaagcagggcccGTGTCCAAGGGCGAGGAGCTGTTCACCGGGGTGGTGCCCATCCTGGTCGAGCTGGACGGCGACGTAAACGGCCACAAGTTCTCCGTGCGGGGCGAGGGCGAGGGCGATGCCACCAACGGCAAGCTGACCCTGAAGTTCATCAGCACCACCGGCAAGCTGCCCGTGCCCTGGCCCACCCTCGTGACCACCCTGACCTACGGCGTGCAGAGCTTCTCCCGCTACCCCGACCACATGAAGCGCCACGACTTCTTCAAGAGCGCCATGCCCGAAGGCTACGTCCAGGAGCGCACCATCTCCTTCAAGGACGACGGCACCTACAAGACCCGCGCCGAGGTGAAGTTCGAGGGCGACACCCTGGTGAACCGCATCGAGCTGAAGGGCATCGACTTCAAGGAGGACGGCAACATCCTGGGGCACAAGCTGGAGTACAACTTCAACTCCCACAACGTCTATATCACCGCCGACAAGCAGAAGAACGGCATCAAGGCCAACTTCAAGATCCGCCACAACGTGGAGGACGGCTCCGTGCAGCTCGCCGACCACTACCAGCAGAACACCCCCATCGGCGACGGCCCCGTGCTGCTGCCCGACAACCACTACCTGTCCACCCAGTCCAAGCTGTCCAAAGACCCCAACGAGAAGCGCGATCACATGGTCCTTCTGGAATTCGTGACCGCCGCCGGGATCACTCACGGCATGGACGAGCTGTACAAGTGA"
-
-comt_cds<- "ATGccggaggccccgcctctgctgttggcagctgtgttgctgggcctggtgctgctggtggtgctgctgctgcttctgaggcactggggctggggcctgtgccttatcggctggaacgagttcatcctgcagcccatccacaacctgctcatgggtgacaccaaggagcagcgcatcctgaaccacgtgctgcagcatgcggagcccgggaacgcacagagcgtgctggaggccattgacacctactgcgagcagaaggagtgggccatgaacgtgggcgacaagaaaggcaagatcgtggacgccgtgattcaggagcaccagccctccgtgctgctggagctgggggcctactgtggctactcagctgtgcgcatggcccgcctgctgtcaccaggggcgaggctgatcaccatcgagatcaaccccgactgtgccgccatcacccagcggatggtggatttcgctggcgtgaaggacaaggtcacccttgtggttggagcgtcccaggacatcatcccccagctgaagaagaagtatgatgtggacacactggacatggtcttcctcgaccactggaaggaccggtacctgccggacacgcttctcttggaggaatgtggcctgctgcggaaggggacagtgctactggctgacaacgtgatctgcccaggtgcgccagacttcctagcacacgtgcgcgggagcagctgctttgagtgcacacactaccaatcgttcctggaatacagggaggtggtggacggcctggagaaggccatctacaagggcccaggcagcgaagcagggcccTGA"
-
-# ROI_1 is 40-74
-# ROI_2 is 136-158 
-roi1_aas<- seq(40,74)
-roi2_aas<- seq(136,158)
-
-comt_cds_split<- unlist(strsplit(toupper(comt_cds), ""))
-
-get_per_codon_data<- function(cds_seq, measure_dt, measure_name){
-  
-  cds_seq_split<- unlist(strsplit(toupper(cds_seq), ""))
-  codon_indices<- seq(1, length(cds_seq_split) - 3, 3)
-  
-  codon_vec<- NULL
-  res_vec<- NULL
-  for(i in codon_indices){
-    cds_codon<- paste(cds_seq_split[i:(i+2)], collapse="")
-    cds_codon_measure<- unlist(measure_dt[codon==cds_codon, measure_name, with=FALSE])
-    codon_vec<- append(codon_vec, cds_codon)
-    res_vec<- append(res_vec, cds_codon_measure)
-  }
-  res_dt<- data.table(Codon=codon_vec, Measure=res_vec)
-  return(res_dt)
-}
-
-comt_cds_csc_dt<- get_per_codon_data(comt_cds, csc_wu_2019_dt, "293T_ORFome")
-
-comt_cds_csc_dt[,Codon_number:=seq(1:.N)]
-
-comt_cds_csc_gg<- ggplot(
-  data=comt_cds_csc_dt, 
-  aes(x=Codon_number, y=Measure))
-
-comt_cds_csc_gg+
-  geom_line(lwd=0.7)+
-  theme_cowplot()+
-  geom_hline(yintercept=0, col="grey", linetype=2)+
-  geom_vline(xintercept=c(62,66), col="limegreen", linetype=2)+
-  labs(x="Codon index", y="293T ORFome CSC")
-
-rm(comt_cds_csc_gg)
-
-comt_cds_csc_dt[Codon_number%in%roi1_aas, .(Mean_CSC=mean(Measure), SD_CSC=sd(Measure))]
-comt_cds_csc_dt[Codon_number%in%roi2_aas, .(Mean_CSC=mean(Measure), SD_CSC=sd(Measure))]
-
-# No large difference in mean or SD
-
-```
-
 
 ## Prediction of variant impact on mRNA folding
 
-Compare differential variants with exhaustive mRNA folding effects of SNPs.
-
-```{r Gaither et al. 2021 exhaustive RNA stability of synonymous mutations}
-
-gaither_2021_dt<- fread("/Users/ianhoskins/synon_rna_stability/RNAStability_v10.5.1_hg38_distinct_SURF_SPI_Phred_GitHub_Export_COMT_rehead.tsv", sep="\t", header=T)
-
-gaither_2021_dt[,TYPE:=as.factor(TYPE)]
-
-# Custom convert from NM_000754.3 to pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS, which was used as reference
-# 19961199 corresponds to first base of exon 2, which starts at POS 4562 of pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS
-# 19962530 corresponds to first base of second codon of membrane isoform
-gaither_2021_comt_select_dt<- gaither_2021_dt[Selected_Trans=="NM_000754.3"]
-gaither_2021_comt_select_dt[,Genomic_POS:=POS]
-gaither_2021_comt_trx_idx_dt<- gaither_2021_comt_select_dt[,.(Genomic_POS=unique(POS))]
-
-# POS will be the pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS transcript position
-# Need to account for Flag in the reference
-# The first seq() maps the 5' UTR and start codon; the second seq() maps the rest of 
-# the coding sequence (omitting the Flag tag)
-# Because 3' UTR was mapped by Gaither, generate placeholder positions that do
-# not exist in pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS
-gaither_2021_comt_trx_idx_dt[,POS:=c(seq(4562,4562+93), seq(4680,4680+1954))]
-
-gaither_2021_comt_select_dt[,POS:=gaither_2021_comt_trx_idx_dt[
-  match(gaither_2021_comt_select_dt[,POS], Genomic_POS), POS]]
-
-# Look at global folding statistics across the trx
-comt_dMFE_gg<- ggplot(
-  data=gaither_2021_comt_select_dt[TYPE!="other"], 
-  aes(x=POS, y=deltaMFE))
-
-comt_dMFE_gg+
-  facet_wrap(~TYPE, scales="free_x")+
-  geom_hline(yintercept=0, col="grey", linetype=2)+
-  geom_smooth()+
-  theme_cowplot()+
-  labs(x="COMT transcript position", y="delta MFE")
-
-rm(comt_dMFE_gg)
-
-# Look at synonymous mutations
-comt_dMFE_synon_gg<- ggplot(
-  data=gaither_2021_comt_select_dt[TYPE=="synonymous"], 
-  aes(x=POS, y=deltaMFE))
-
-comt_dMFE_synon_gg+
-  geom_hline(yintercept=0, col="grey", linetype=2)+
-  geom_point()+
-  geom_smooth()+
-  theme_cowplot()+
-  labs(x="COMT transcript position", y="delta MFE")
-
-rm(comt_dMFE_synon_gg)
-
-# Missense
-comt_dMFE_missense_gg<- ggplot(
-  data=gaither_2021_comt_select_dt[TYPE=="missense"], 
-  aes(x=POS, y=deltaMFE))
-
-comt_dMFE_missense_gg+
-  geom_hline(yintercept=0, col="grey", linetype=2)+
-  geom_point()+
-  geom_smooth()+
-  theme_cowplot()+
-  labs(x="COMT transcript position", y="delta MFE")
-
-rm(comt_dMFE_missense_gg)
-
-# Plot SPI norm across the COMT transcript
-comt_spi_norm_gg<- ggplot(
-  data=gaither_2021_comt_select_dt[TYPE=="synonymous"], 
-  aes(x=POS, y=SPI_Norm))
-
-comt_spi_norm_gg+
-  geom_hline(yintercept=0, col="grey", linetype=2)+
-  geom_point()+
-  geom_smooth(method="lm")+
-  scale_color_npg()+
-  theme_cowplot()+
-  labs(x="COMT transcript position", y="Norm. SPI")
-
-rm(comt_spi_norm_gg)
-
-# Now merge stats with the differential variants and test if variants with differential abundance
-# show a trend in global folding statistics
-comt_rna_limma_input_cast_eset_fit_eb_all_merge_dt[,SURF_key:=paste(POS, REF, ALT, sep=":")]
-gaither_2021_comt_select_dt[,SURF_key:=paste(POS, REF, ALT, sep=":")]
-
-comt_all_limma_input_cast_eset_fit_eb_all_merge_surf_dt<- 
-  merge(comt_rna_limma_input_cast_eset_fit_eb_all_merge_dt, 
-        gaither_2021_comt_select_dt, by="SURF_key")
-
-# Compare differential to non-differential variants
-comt_all_limma_input_cast_eset_fit_eb_all_merge_surf_dt[,Direction:="N.S."]
-
-comt_all_limma_input_cast_eset_fit_eb_all_merge_surf_dt[
-  adj.P.Val < loose_fdr_thresh & logFC > 0, Direction:="RNA up"]
-
-comt_all_limma_input_cast_eset_fit_eb_all_merge_surf_dt[
-  adj.P.Val < loose_fdr_thresh & logFC < 0, Direction:="RNA down"]
-
-comt_all_limma_input_cast_eset_fit_eb_all_merge_surf_dt[
-  ,Direction:=factor(Direction, levels=c("N.S.", "RNA down", "RNA up"))]
-
-# deltaMFE, deltaCFE, deltaCD, SURF, SPI_Norm
-limma_vs_surf_gg<- ggplot(
-  data=comt_all_limma_input_cast_eset_fit_eb_all_merge_surf_dt, 
-  aes(x=Direction, y=SURF))
-
-limma_vs_surf_gg+
-  geom_hline(yintercept=0, col="grey", linetype=2)+
-  geom_boxplot(outlier.shape=NA)+
-  geom_jitter(width=0.2)+
-  theme_cowplot()+
-  labs(x="Direction")
-
-rm(limma_vs_surf_gg)
-
-# Look specifically at the hotspot
-limma_vs_surf_hotspot_gg<- ggplot(
-  data=comt_all_limma_input_cast_eset_fit_eb_all_merge_surf_dt[
-    AA_POS2%in%seq(62,66) & Direction!="RNA down"], 
-  aes(x=Direction, y=deltaCD))
-
-limma_vs_surf_hotspot_gg+
-  geom_hline(yintercept=0, col="grey", linetype=2)+
-  geom_boxplot(outlier.shape=NA)+
-  geom_jitter(width=0.2)+
-  theme_cowplot()+
-  labs(x="Direction")
-
-rm(limma_vs_surf_hotspot_gg)
-
-# deltaCFE and deltaCD appear different between N.S. and RNA_up classes
-
-# RNA up versus N.S. for delta MFE at the hotspot
-comt_all_limma_input_cast_eset_fit_eb_all_merge_surf_dt[
-  AA_POS2%in%seq(62,66) & !is.na(deltaMFE) & Direction!="RNA down", t.test(
-    formula=deltaMFE~Direction, data=.SD)]
-
-# RNA up versus N.S. for delta CFE at the hotspot
-comt_all_limma_input_cast_eset_fit_eb_all_merge_surf_dt[
-  AA_POS2%in%seq(62,66) & !is.na(deltaCFE) & Direction!="RNA down", t.test(
-    formula=deltaCFE~Direction, data=.SD)]
-
-# RNA up versus N.S. for delta CD at the hotspot
-comt_all_limma_input_cast_eset_fit_eb_all_merge_surf_dt[
-  AA_POS2%in%seq(62,66) & !is.na(deltaCD) & Direction!="RNA down", t.test(
-    formula=deltaCD~Direction, data=.SD)]
-
-# Compare logFC for variants between regions with altered dMFE
-comt_all_limma_input_cast_eset_fit_eb_all_merge_surf_all_dt<- 
-  merge(comt_rna_limma_input_cast_eset_fit_eb_all_merge_dt, 
-        gaither_2021_comt_select_dt, by="SURF_key", all.y=TRUE)
-
-# ROI_1: 4794, 4898
-# ROI_2: 5082, 5150
-
-comt_roi_map_gg<- ggplot(
-  data=comt_all_limma_input_cast_eset_fit_eb_all_merge_surf_all_dt[
-    TYPE.y%in%c("synonymous", "missense")], 
-  aes(x=POS.y, y=deltaMFE))
-
-comt_roi_map_gg+
-  geom_rect(aes(xmin=4794, xmax=4898, ymin=-Inf, ymax=Inf), fill="pink")+
-  geom_rect(aes(xmin=5082, xmax=5150, ymin=-Inf, ymax=Inf), fill="pink")+
-  geom_vline(xintercept=5115, col="yellow")+
-  geom_hline(yintercept=0, col="grey", linetype=2)+
-  geom_point()+
-  geom_smooth(method="loess", span=0.2)+
-  theme_cowplot()+
-  labs(x="COMT transcript position", y="delta MFE")
-
-rm(comt_roi_map_gg)
-
-# Compare logFC for variants after 5115 to all other variants
-comt_rna_limma_input_cast_eset_fit_eb_all_merge_dt[
-  ,dMFE_cutoff:=ifelse(POS>5115, TRUE, FALSE)]
-
-# adj.P.Val<fdr_thresh
-dmfe_cutoff_gg<- ggplot(
-  data=comt_rna_limma_input_cast_eset_fit_eb_all_merge_dt[ROI=="ROI_2" & VAR_TYPE!="Nonsense"],
-  aes(x=dMFE_cutoff, y=logFC))
-
-dmfe_cutoff_gg+
-  geom_hline(yintercept=0, col="grey", linetype=2)+
-  geom_boxplot()+
-  labs(x="POS > 5115", y="log ratio, cDNA to gDNA")+
-  theme_cowplot()
-
-rm(dmfe_cutoff_gg)
-
-comt_rna_limma_input_cast_eset_fit_eb_all_merge_dt[
-  ROI=="ROI_2" & VAR_TYPE!="Nonsense", t.test(formula=logFC~dMFE_cutoff, data=.SD)]
-
-```
-
-```{r RNAsnp prediction for RNA up variants limma}
-
-comt_insert_offset<- 4561
-
-varid_to_rnasnp<- function(pos, ref, alt, ref_offset=comt_insert_offset){
-  
-  pos_offset<- pos - ref_offset
-  refs<- unlist(strsplit(ref, ""))
-  alts<- unlist(strsplit(alt, ""))
-  
-  if(length(refs) == 1){
-    res<- paste(refs, pos_offset, alts, sep="")
-    return(res)
-  } else {
-    
-    res<- NULL
-    for(i in 1:length(refs)){
-      ref_i<- refs[i]
-      alt_i<- alts[i]
-      
-      if(ref_i!=alt_i){
-        subst<- paste(ref_i, pos_offset+(i-1), alt_i, sep="")
-        res<- c(res, subst)
-      }
-    }
-    final_res<- paste(res, collapse="-")
-    return(final_res)
-  }
-}
-
-# Generate the RNAsnp IDs
-comt_rna_limma_input_cast_eset_fit_eb_all_merge_dt[
-  ,RNAsnp_ID:=varid_to_rnasnp(POS, REF, ALT), by=seq_len(nrow(
-    comt_rna_limma_input_cast_eset_fit_eb_all_merge_dt))]
-
-rnasnp_ids_file<- paste(comt_base_dir, "RNAsnp", "COMT_RNAsnp_IDs.txt", sep="/")
-
-write.table(comt_rna_limma_input_cast_eset_fit_eb_all_merge_dt[,RNAsnp_ID], 
-            rnasnp_ids_file, quote=FALSE, row.names=FALSE, col.names=FALSE)
-
-# Read in RNAsnp results
-rnasnp_res_file<- paste(comt_base_dir, "RNAsnp", "COMT_RNAsnp_results.txt", sep="/")
-rnasnp_res_dt<- fread(rnasnp_res_file, sep="\t")
-names(rnasnp_res_dt)[5]<- "d_max_interval"
-names(rnasnp_res_dt)[8]<- "r_min_interval"
-names(rnasnp_res_dt)[7]<- "d_max_pval"
-names(rnasnp_res_dt)[10]<- "r_min_pval"
-
-# Merge with mRNA abundance annotations
-comt_rna_limma_input_cast_eset_fit_eb_all_merge_dt[,SNP:=RNAsnp_ID]
-
-rnasnp_res_merge_dt<- merge(
-  comt_rna_limma_input_cast_eset_fit_eb_all_merge_dt,
-  rnasnp_res_dt, by="SNP")
-
-# Look at min correlation between WT and mutant across target regions
-rnasnp_cor_by_pos_gg<- ggplot(
-  data=rnasnp_res_merge_dt, 
-  aes(x=POS, y=r_min, col=-1*log10(r_min_pval)))
-
-rnasnp_cor_by_pos_gg+
-  facet_wrap(~ROI, scales="free_x")+
-  geom_point()+
-  scale_color_viridis(option="C")+
-  labs(x="Target position", y="Min correlation", col="-log10(p-value)")+
-  theme_cowplot()+
-  theme(legend.position="bottom")
-
-rm(rnasnp_cor_by_pos_gg)
-  
-# Map ROI_1 and its mRNA abundance hotspot
-rnasnp_cor_by_pos_roi1_gg<- ggplot(
-  data=rnasnp_res_merge_dt[ROI=="ROI_1"], 
-  aes(x=POS, y=r_min, col=-1*log10(r_min_pval)))
-
-rnasnp_cor_by_pos_roi1_gg+
-  geom_rect(aes(xmin=4860, xmax=4874, ymin=-Inf, ymax=Inf), fill="lightblue")+
-  geom_point()+
-  scale_color_viridis(option="C")+
-  labs(x="Target position", y="Min correlation", col="-log10(p-value)")+
-  theme_cowplot()+
-  theme(legend.position="bottom")
-
-rm(rnasnp_cor_by_pos_roi1_gg)
-
-# Map ROI_2 and its mRNA abundance hotspot
-rnasnp_cor_by_pos_roi2_gg<- ggplot(
-  data=rnasnp_res_merge_dt[ROI=="ROI_2"], 
-  aes(x=POS, y=r_min, col=-1*log10(r_min_pval)))
-
-rnasnp_cor_by_pos_roi2_gg+
-  geom_rect(aes(xmin=5115, xmax=5150, ymin=-Inf, ymax=Inf), fill="lightblue")+
-  geom_point()+
-  scale_color_viridis(option="C")+
-  labs(x="Target position", y="Min correlation", col="-log10(p-value)")+
-  theme_cowplot()+
-  theme(legend.position="bottom")
-
-rm(rnasnp_cor_by_pos_roi2_gg)
-
-# So RNAsnp and Gaither et al. 2021 SNP analysis is consistent with greater effects after 
-# target position 5115
-
-# Compare logFC in mRNA abundance with folding correlation
-rnasnp_logfc_gg<- ggplot(
-  data=rnasnp_res_merge_dt[adj.P.Val < loose_fdr_thresh], 
-  aes(x=logFC, y=r_min, col=-1*log10(r_min_pval)))
-
-rnasnp_logfc_gg+
-  facet_wrap(~ROI)+
-  geom_point()+
-  scale_color_viridis(option="C")+
-  labs(x="log FC", y="Min correlation", col="-log10(p-value)")+
-  theme_cowplot()+
-  theme(legend.position="bottom")
-
-rm(rnasnp_logfc_gg)
-
-# No linear association between RNAsnp folding perturbation and log FC
-
-# Is the magnitude of mRNA abundance effect in either direction 
-# associated with disrupted folding?
-rnasnp_abs_logfc_gg<- ggplot(
-  data=rnasnp_res_merge_dt[adj.P.Val < loose_fdr_thresh], 
-  aes(x=abs(logFC), y=r_min, col=-1*log10(r_min_pval)))
-
-rnasnp_abs_logfc_gg+
-  geom_point()+
-  scale_color_viridis(option="C")+
-  labs(x="abs(log FC)", y="Min correlation", col="-log10(p-value)")+
-  theme_cowplot()+
-  theme(legend.position="bottom")
-
-rm(rnasnp_abs_logfc_gg)
-
-# No association
-
-# Finally compare variants after position 5115 to all others
-rnasnp_logfc_roi2_gg<- ggplot(
-  data=rnasnp_res_merge_dt[adj.P.Val < loose_fdr_thresh & r_min_pval < 0.15], 
-  aes(x=dMFE_cutoff, y=logFC))
-
-rnasnp_logfc_roi2_gg+
-  geom_jitter(width=0.1)+
-  labs(x="POS > 5115", y="log FC")+
-  theme_cowplot()+
-  theme(legend.position="bottom")
-
-rm(rnasnp_logfc_roi2_gg)
-
-# Choose the most interesting variants
-rna_snp_aa_positions<- c(51, 56, 59, 62, 63, 74, 152)
-rna_snp_aa_changes<- c("p.M51L", "p.E56R", "p.I59G", "p.H62S", "p.H62R", "p.V63L", "p.V63F", "p.S74L", "p.S74H", "p.M152T")
-rna_snp_var_ids<- c("p.M51L"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4827:ATG:CTC",
-                    "p.E56R"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4842:GAG:CGT",
-                    "p.I59G"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4851:ATC:GGG",
-                    "p.H62S"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4860:CAC:TCT", 
-                    "p.H62R"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4861:AC:GG", 
-                    "p.V63L"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4863:GTG:TTA", 
-                    "p.V63F"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4863:GTG:TTT", 
-                    "p.S74L"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4896:AGC:CTA", 
-                    "p.S74H"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4896:AG:CA", 
-                    "p.M152T"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:5131:TG:CT")
-
-rna_snp_silent_var_ids<- c(
-  "p.H62H"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4862:C:T",
-  "p.V63V"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4865:G:A",
-  "p.V63V"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4865:G:C")
-
-
-
-# comt_rna_limma_input_cast_eset_fit_eb_all_merge_dt[VAR_ID%in%rna_snp_var_ids, POS-comt_insert_offset, keyby="VAR_ID"]
-# comt_rna_limma_input_cast_eset_fit_eb_all_merge_dt[VAR_ID%in%rna_snp_silent_var_ids, POS-comt_insert_offset, keyby="VAR_ID"]
-
-rna_snp_var_ids_lessthan_pval_0.15<- comt_rna_limma_input_cast_eset_fit_eb_all_merge_dt[
-  VAR_ID%in%rna_snp_var_ids, POS-comt_insert_offset, keyby="VAR_ID"][5:9, VAR_ID]
-
-# 386 is second coding codon within ENST00000361682.10 (the native reference used)
-#comt_cds_offset<- 386 - 1
-
-#comt_up_positions<- c(536, 602, 575, 578, 603, 567, 567, 596, 602, 579, 593, 533, 605)
-#comt_up_positions_offset<- comt_up_positions - comt_cds_offset
-
-# Add the UTR5 ex2 and Flag to the position offsets to get coo rdinates 
-# for the expressed COMT sequence
-#comt_utr5_ex2_flag_add<- 118
-#comt_up_positions_RNAsnp<- comt_up_positions_offset + comt_utr5_ex2_flag_add
-
-# Variants up at FDR < 0.01
-
-# 269 G269C-G270A
-# 335 A335C-G336T-C337A   X
-# 308 C308A-G310T
-# 311 C311T-A312C-T313G
-# 336 G336C-C337G   X
-# 300 A300G-C301G   X
-# 300 A300C-C301T
-# 329 G329T-A331T   X
-# 335 A335C-C337A   X
-# 312 A312T-T313C
-# 326 A326C-A327T
-# 266 A266C-G268C
-# 338 G338A
-
-```
-
-```{r RNAsnp prediction for RNA up variants ALDEx2}
+```{r RNAsnp predictions}
 
 comt_insert_offset<- 4561
 
@@ -6718,89 +5690,10 @@ rm(rnasnp_effect_gg)
 
 # No linear association between RNAsnp folding perturbation and effect size
 
-# Which variants are expected to alter folding?
-#comt_rnasnp_sig_var_ids<- rnasnp_res_merge_dt[we.eBH < comt_rna_fdr_thresh & VAR_TYPE!="Nonsense" & r_min_pval < comt_rna_fdr_thresh, VAR_ID]
-
-comt_rna_input_cast_mat_cpm_aldex_merge_dt[
-  r_min<0.1 & Direction!="N.S." & VAR_TYPE!="Nonsense", .(ID_SHORT, effect, we.eBH)]
-
-# What about the silent variants at H62, V63?
-rna_snp_silent_var_ids<- c(
-  "p.H62H"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4862:C:T",
-  "p.V63V"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4865:G:A",
-  "p.V63V"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4865:G:C")
-
-comt_rna_input_cast_mat_cpm_aldex_merge_dt[VAR_ID%in%rna_snp_silent_var_ids, .(ID_SHORT, effect, we.eBH, r_min, r_min_pval)]
-
-# Compare results for H62-V63 hotspot to all other variants
-comt_rna_input_cast_mat_cpm_aldex_merge_dt[,Hotspot:=ifelse(AA_POS%in%c("62", "63"), "True", "False")]
-comt_rna_input_cast_mat_cpm_aldex_merge_dt[,Hotspot:=factor(Hotspot, levels=c("True", "False"))]
-
-rnasnp_hotspot_gg<- ggplot(
-  data=comt_rna_input_cast_mat_cpm_aldex_merge_dt[r_min_pval < comt_rna_fdr_thresh], 
-  aes(x=Hotspot, y=r_min))
-
-rnasnp_hotspot_gg+
-  geom_boxplot()+
-  theme_cowplot()
-
-rm(rnasnp_hotspot_gg)
-
-# No difference
-
-# Is the magnitude of mRNA abundance effect in either direction 
-# associated with disrupted folding?
-rnasnp_abs_effect_gg<- ggplot(
-  data=comt_rna_input_cast_mat_cpm_aldex_merge_dt[we.eBH < comt_rna_fdr_thresh], 
-  aes(x=abs(effect), y=r_min, col=-1*log10(r_min_pval)))
-
-rnasnp_abs_effect_gg+
-  geom_point()+
-  scale_color_viridis(option="C")+
-  labs(x="abs(effect size)", y="Min correlation", col="-log10(p-value)")+
-  theme_cowplot()
-
-rm(rnasnp_abs_effect_gg)
-
-# No association
-
-# Finally compare variants after position 5115 to all others
-comt_rna_input_cast_mat_cpm_aldex_merge_dt[,RNAsnp_ROI:=as.factor(ifelse(POS>5115, "True", "False"))]
-
-rnasnp_effect_roi2_gg<- ggplot(
-  data=comt_rna_input_cast_mat_cpm_aldex_merge_dt[we.eBH < comt_rna_fdr_thresh], 
-  aes(x=RNAsnp_ROI, y=effect))
-
-rnasnp_effect_roi2_gg+
-  geom_jitter(width=0.1)+
-  labs(x="POS > 5115", y="Effect size")+
-  theme_cowplot()+
-  theme(legend.position="bottom")
-
-rm(rnasnp_effect_roi2_gg)
-
-# Choose the most interesting variants
-rna_snp_aa_positions<- c(51, 56, 59, 62, 63, 74, 152)
-rna_snp_aa_changes<- c("p.M51L", "p.E56R", "p.I59G", "p.H62S", "p.H62R", "p.V63L", "p.V63F", "p.S74L", "p.S74H", "p.M152T")
-rna_snp_var_ids<- c("p.M51L"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4827:ATG:CTC",
-                    "p.E56R"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4842:GAG:CGT",
-                    "p.I59G"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4851:ATC:GGG",
-                    "p.H62S"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4860:CAC:TCT", 
-                    "p.H62R"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4861:AC:GG", 
-                    "p.V63L"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4863:GTG:TTA", 
-                    "p.V63F"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4863:GTG:TTT", 
-                    "p.S74L"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4896:AGC:CTA", 
-                    "p.S74H"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4896:AG:CA", 
-                    "p.M152T"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:5131:TG:CT")
-
-
 ```
 
 
 # Variants with differential ribosome load
-
-anota2seq requires at least 2 sample classes (e.g. control, treatment) to perform analysis
-Use limma and ALDEx2 to compare biological replicates between total RNA and polysome metafractions 3-4
 
 ```{r COMT Poly F2 limma}
 
@@ -8522,12 +7415,9 @@ comt_rna_vs_protein_aldex_dt[
 
 # Variants with differential protein abundance
 
-Analyze variant frequencies in each population/quadrant relative to gDNA frequency to determine effects on protein abundance.
+```{r COMT FC plots}
 
-```{r COMT FACS plots}
-
-comt_facs_trial2_dir<- paste(comt_facs_dir, "Trial2", sep="/")
-comt_facs_trial2_files<- list.files(comt_facs_trial2_dir, full.names=TRUE)
+comt_facs_trial2_files<- list.files(comt_facs_dir, full.names=TRUE)
 comt_facs_trial2_list<- lapply(comt_facs_trial2_files, fread, sep=",", header=TRUE)
 comt_facs_trial2_list_nrows<- sapply(comt_facs_trial2_list, nrow)
 
@@ -8559,10 +7449,7 @@ comt_facs_trial2_all_dt[!is.na(log10_mCherry) & !is.na(log10_GFP), cor(log10_mCh
 
 ```
 
-```{r COMT FACS analysis}
-
-# comt_all_filt_postprocess_subtract_drop_bio_dt
-# comt_all_filt_postprocess_subtract_drop_cast_combat_dt
+```{r COMT FC analysis}
 
 comt_all_filt_postprocess_subtract_drop_cast_combat_bio_dt[,AA_POS:=as.integer(AA_POS)]
 comt_all_filt_postprocess_subtract_drop_cast_combat_bio_dt[,ALT_AA:=factor(ALT_AA, levels=unlist(aa_class_list))]
@@ -8747,14 +7634,11 @@ rm(comt_facs_freq_diff_nonsense_distr_gg)
 
 ```
 
-```{r COMT FACS Q1 limma}
+```{r COMT FC Q1 limma}
 
 facs_fdr_thresh<- 0.01
 replicate_count_thresh<- 8
 log_caf_thresh<- -10
-
-# As a final method to identify variants with differential protein
-# use limma to compare gDNA frequencies to frequencies in each quadrant
 
 # Discard the FACS input samples and use gDNA in place
 comt_facs_limma_dt<- comt_all_filt_postprocess_subtract_drop_cast_combat_dt[
@@ -8925,7 +7809,7 @@ rm(comt_facs_limma_q1_sig_gg)
 
 ```
 
-```{r COMT FACS Q1 ALDEx2}
+```{r COMT FC Q1 ALDEx2}
 
 comt_facs_q1_fdr_thresh<- 0.01
 
@@ -9017,9 +7901,32 @@ comt_facs_q1_aldex_ve_gg+
 
 rm(comt_facs_q1_aldex_ve_gg)
 
+# Compare to ESM1b predictions
+esm1b_dt<- fread(paste(esm1b_dir, "COMT_ESM1b_P21964.csv", sep="/"), sep=",")
+esm1b_dt[,AA_CHANGE:=paste("p", variant, sep=".")]
+
+comt_facs_q1_limma_input_cast_mat_cpm_aldex_merge_esm1b_dt<- merge(
+  comt_facs_q1_limma_input_cast_mat_cpm_aldex_merge_dt,
+  esm1b_dt, by="AA_CHANGE")
+
+comt_facs_limma_q1_sig_esm1b_gg<- ggplot(
+  data=comt_facs_q1_limma_input_cast_mat_cpm_aldex_merge_esm1b_dt,
+  aes(x=effect, y=score))
+
+comt_facs_limma_q1_sig_esm1b_gg+
+  geom_point(alpha=0.5)+
+  labs(x="P1 effect size", y="ESM1b score")+
+  theme_cowplot()
+
+rm(comt_facs_limma_q1_sig_esm1b_gg)
+
+#comt_facs_q1_limma_input_cast_mat_cpm_aldex_merge_esm1b_dt[,cor(effect, score)]
+#comt_facs_q1_limma_input_cast_mat_cpm_aldex_merge_esm1b_dt[,cor(effect, score, method="spearman")]
+
+
 ```
 
-```{r COMT FACS Q2 limma}
+```{r COMT FC Q2 limma}
 
 facs_fdr_thresh<- 0.1
 replicate_count_thresh<- 8
@@ -9198,7 +8105,7 @@ rm(comt_facs_limma_q2_sig_gg)
 
 ```
 
-```{r COMT FACS Q2 ALDEx2}
+```{r COMT FC Q2 ALDEx2}
 
 comt_facs_q2_fdr_thresh<- 0.2
 
@@ -9292,7 +8199,7 @@ comt_facs_q2_aldex_ve_gg+
 
 ```
 
-```{r COMT FACS Q3 limma}
+```{r COMT FC Q3 limma}
 
 facs_fdr_thresh<- 0.004
 replicate_count_thresh<- 8
@@ -9508,6 +8415,10 @@ comt_facs_limma_q3_input_cast_mat_eset_fit_eb_all_annot_dt[,ALT_AA_level:=as.int
 
 comt_facs_limma_q3_input_cast_mat_eset_fit_eb_all_annot_loose_dt<- comt_facs_limma_q3_input_cast_mat_eset_fit_eb_all_annot_dt[adj.P.Val < 0.01]
 
+demask_file<- paste(demask_dir, "dc59eaf2256a3e939635.txt", sep="/")
+demask_dt<- fread(demask_file, sep="\t")
+demask_dt[,AA_CHANGE:=paste("p.", WT, pos, var, sep="")]
+
 comt_facs_limma_q3_input_cast_mat_eset_fit_eb_all_annot_loose_demask_dt<- 
   merge(comt_facs_limma_q3_input_cast_mat_eset_fit_eb_all_annot_loose_dt, demask_dt, by="AA_CHANGE")
 
@@ -9567,7 +8478,7 @@ rm(comt_facs_q3_ve_heatmap_gg)
 
 ```
 
-```{r COMT FACS Q3 ALDEx2}
+```{r COMT FC Q3 ALDEx2}
 
 comt_facs_q3_fdr_thresh<- 0.05
 comt_facs_q3_fdr_loose_thresh<- 0.15
@@ -9676,14 +8587,63 @@ rm(comt_facs_limma_q3_sig_demask_gg)
 
 # Results track with the DeMask score; test with Wilcoxon rank sum 
 comt_facs_q3_limma_input_cast_mat_cpm_aldex_merge_demask_dt[
-  ROI=="ROI_1" & we.eBH<0.2, wilcox.test(score~Direction, data=.SD), .SDcols=c("score", "Direction")]
+  ROI=="ROI_1" & we.eBH<0.15, wilcox.test(score~Direction, data=.SD), .SDcols=c("score", "Direction")]
 
 comt_facs_q3_limma_input_cast_mat_cpm_aldex_merge_demask_dt[
-  ROI=="ROI_2" & we.eBH<0.2, wilcox.test(score~Direction, data=.SD), .SDcols=c("score", "Direction")]
+  ROI=="ROI_2" & we.eBH<0.15, wilcox.test(score~Direction, data=.SD), .SDcols=c("score", "Direction")]
+
+# Compare to ESM1b predictions
+esm1b_dt<- fread(paste(esm1b_dir, "COMT_ESM1b_P21964.csv", sep="/"), sep=",")
+esm1b_dt[,AA_CHANGE:=paste("p", variant, sep=".")]
+
+comt_facs_q3_limma_input_cast_mat_cpm_aldex_merge_demask_esm1b_dt<- merge(
+  comt_facs_q3_limma_input_cast_mat_cpm_aldex_merge_demask_dt,
+  esm1b_dt, by="AA_CHANGE")
+
+comt_facs_limma_q3_sig_esm1b_gg<- ggplot(
+  data=comt_facs_q3_limma_input_cast_mat_cpm_aldex_merge_demask_esm1b_dt[we.eBH<0.15],
+  aes(col=ROI, x=score.y, linetype=Direction))
+
+comt_facs_limma_q3_sig_esm1b_gg+
+  geom_density()+
+  scale_color_manual(values=roi_cols)+
+  labs(x="ESM1b score")+
+  theme_cowplot()
+
+comt_facs_limma_q3_sig_esm1b_gg<- ggplot(
+  data=comt_facs_q3_limma_input_cast_mat_cpm_aldex_merge_demask_esm1b_dt,
+  aes(x=effect, y=score.y))
+
+comt_facs_limma_q3_sig_esm1b_gg+
+  geom_point(alpha=0.5)+
+  geom_smooth(method="loess", span=0.5)+
+  labs(x="P3 effect size", y="ESM1b score")+
+  theme_cowplot()
+
+#comt_facs_q3_limma_input_cast_mat_cpm_aldex_merge_demask_esm1b_dt[we.eBH<0.15, cor(score.x, score.y)]
+# High correlation between DeMask and ESM1b scores
+
+comt_facs_q3_limma_input_cast_mat_cpm_aldex_merge_demask_esm1b_dt[,cor(effect, score.y)]
+comt_facs_q3_limma_input_cast_mat_cpm_aldex_merge_demask_esm1b_dt[,cor(effect, score.y, method="spearman")]
+
+
+comt_facs_limma_q3_sig_esm1b_gg<- ggplot(
+  data=comt_facs_q3_limma_input_cast_mat_cpm_aldex_merge_demask_esm1b_dt[we.eBH < 0.1],
+  aes(x=Direction, y=score.y))
+
+comt_facs_limma_q3_sig_esm1b_gg+
+  geom_boxplot(width=0.5, outlier.shape=NA, fill="steelblue", alpha=0.75)+
+  geom_jitter(width=0.15)+
+  labs(x="P3 effect size direction", y="ESM1b score")+
+  theme_cowplot()
+
+rm(comt_facs_limma_q3_sig_esm1b_gg)
+
+wilcox.test(score.y~Direction, data=comt_facs_q3_limma_input_cast_mat_cpm_aldex_merge_demask_esm1b_dt[we.eBH < 0.1])
 
 ```
 
-```{r COMT FACS Q4 limma}
+```{r COMT FC Q4 limma}
 
 facs_fdr_thresh<- 0.004
 replicate_count_thresh<- 8
@@ -9862,7 +8822,7 @@ rm(comt_facs_limma_q4_sig_gg)
 
 ```
 
-```{r COMT FACS Q4 ALDEx2}
+```{r COMT FC Q4 ALDEx2}
 
 comt_facs_q4_fdr_thresh<- 0.01
 
@@ -9952,6 +8912,24 @@ comt_facs_q4_aldex_ve_gg+
   theme_cowplot()
 
 rm(comt_facs_q4_aldex_ve_gg)
+
+# Are mutations to uncharged, nonpolar amino acids at I59, H62, H66 tolerated?
+comt_facs_q4_rep_summ_ve_dt[AA_POS%in%c(59,62,66) & ALT_AA%in%nonpolar_uncharged_aas]
+comt_facs_q4_rep_summ_ve_dt[AA_CHANGE%in%c("p.I59A", "p.I59L", "p.H62I", "p.H62V", "p.H62Y", "p.H62F", "p.H66V")]
+
+nu_var_ids<- c("p.I59A"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4851:AT:GC",
+               "p.I59L"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4851:ATC:TTA",
+               "p.H62I"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4860:CA:AT",
+               "p.H62V"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4860:CA:GT",
+               "p.H62Y"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4860:CAC:TAT",
+               "p.H62F"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4860:CAC:TTT",
+               "p.H66V"="pDEST_HC_Rec_Bxb_v2_UTR5_Flag_COMT_moxGFP_LPS:4872:CAT:GTG")
+
+#comt_facs_q4_limma_input_cast_mat_cpm_aldex_merge_dt[VAR_ID%in%nu_var_ids]
+# None of the variants were significantly up in P4
+
+comt_facs_q1_limma_input_cast_mat_cpm_aldex_merge_dt[VAR_ID%in%nu_var_ids]
+comt_facs_q2_limma_input_cast_mat_cpm_aldex_merge_dt[VAR_ID%in%nu_var_ids]
 
 ```
 
@@ -10097,6 +9075,9 @@ rna_vs_facs2_gg+
   labs(x="cDNA:gDNA direction", y="P2 effect")+
   theme_cowplot()
 
+wilcox.test(effect.y~Direction.x, data=comt_facs_rna_limma_input_cast_mat_cpm_aldex_merge_dt[Quadrant=="Q2" & Direction.x!="N.S."])
+# 0.01228
+
 rna_vs_facs3_gg<- ggplot(
   data=comt_facs_rna_limma_input_cast_mat_cpm_aldex_merge_dt[Quadrant=="Q3"], 
   aes(x=Direction.x, y=effect.y, fill=Direction.x))
@@ -10175,6 +9156,140 @@ rm(list=c("rna_vs_facs1_gg", "rna_vs_facs2_gg", "rna_vs_facs3_gg", "rna_vs_facs4
 
 ```
 
+```{r COMT Q1 and Q2 effect size correlation}
+
+comt_facs_all_limma_input_cast_mat_cpm_aldex_q_compare_dt<- merge(
+  comt_facs_all_limma_input_cast_mat_cpm_aldex_dt[Quadrant=="Q1", .(VAR_ID, effect, diff.btw)], 
+  comt_facs_all_limma_input_cast_mat_cpm_aldex_dt[Quadrant=="Q2", .(VAR_ID, effect, diff.btw)], by="VAR_ID")
+
+q1_q2_compare_gg<- ggplot(
+  data=comt_facs_all_limma_input_cast_mat_cpm_aldex_q_compare_dt, 
+  aes(x=effect.x, y=effect.y))
+
+q1_q2_compare_gg+
+  geom_point(alpha=0.5)+
+  geom_abline(slope=1, col="grey", linetype=2)+
+  labs(x="P1 effect size", y="P2 effect size")+
+  theme_cowplot()
+
+#comt_facs_all_limma_input_cast_mat_cpm_aldex_q_compare_dt[,cor(effect.x, effect.y)]
+#comt_facs_all_limma_input_cast_mat_cpm_aldex_q_compare_dt[,cor(effect.x, effect.y, method="spearman")]
+
+# Little correlation
+
+# Run another ALDEx2 analysis comparing P1 and P2 and see if variants decreasing RNA abundance are enriched in P2
+replicate_count_thresh<- 8
+log_caf_thresh<- -10
+
+# As a final method to identify variants with differential protein
+# use limma to compare gDNA frequencies to frequencies in each quadrant
+
+# Discard the FACS input samples and use gDNA in place
+comt_facs_limma_dt<- comt_all_filt_postprocess_subtract_drop_cast_combat_dt[
+  Input=="FACS" & !grepl("Input", Key_bio) & Quadrant%in%c("1", "2")]
+
+comt_facs_limma_dt[,Quadrant:=sapply(strsplit(as.character(Key_bio), "_"), "[", 3)]
+
+# Use a filter on frequency; corresponds to ~10 counts
+comt_facs_limma_q1_q2_counts_dt<- comt_facs_limma_dt[Median_log_CAF>log_caf_thresh, .N, by=.(VAR_ID)]
+
+comt_facs_limma_complete_varids<- comt_facs_limma_q1_q2_counts_dt[
+  N>=replicate_count_thresh, unique(VAR_ID)]
+
+comt_facs_limma_q1_q2_input_dt<- comt_facs_limma_dt[VAR_ID%in%comt_facs_limma_complete_varids]
+
+comt_facs_limma_q1_q2_input_dt[,Key:=paste(Quadrant,Key,sep=":")]
+
+comt_facs_limma_q1_q2_input_cast_dt<- dcast(
+  data=comt_facs_limma_q1_q2_input_dt, formula=VAR_ID~Key, value.var="Median_log_CAF")
+
+comt_facs_limma_q1_q2_input_cast_mat<- as.matrix(
+  comt_facs_limma_q1_q2_input_cast_dt[,-c("VAR_ID")])
+
+rownames(comt_facs_limma_q1_q2_input_cast_mat)<- comt_facs_limma_q1_q2_input_cast_dt[,VAR_ID]
+
+
+comt_facs_q1_q2_fdr_thresh<- 0.15
+
+# First transform normalized frequencies to counts per million
+comt_facs_limma_q1_q2_input_cast_mat_cpm<- apply(comt_facs_limma_q1_q2_input_cast_mat, 2, function(x){round(exp(x)*1e6)})
+
+set.seed(9)
+
+comt_facs_limma_q1_q2_input_cast_mat_cpm_aldex_dt<- run_aldex(comt_facs_limma_q1_q2_input_cast_mat_cpm, c(rep("A", 4), rep("B", 4)))
+
+# Look at the raw p-values to ensure testing procedure is correct
+comt_facs_q1_q2_aldex2_pval_gg<- ggplot(
+  data=comt_facs_limma_q1_q2_input_cast_mat_cpm_aldex_dt, 
+  aes(x=we.ep))
+
+comt_facs_q1_q2_aldex2_pval_gg+
+  geom_histogram()+
+  theme_cowplot()
+
+rm(comt_facs_q1_q2_aldex2_pval_gg)
+
+# Volcano plot of ALDEx2 results
+comt_facs_q1_q2_aldex2_gg<- ggplot(
+  data=comt_facs_limma_q1_q2_input_cast_mat_cpm_aldex_dt,
+  aes(x=effect, y=-1*log10(we.eBH)))
+
+comt_facs_q1_q2_aldex2_gg+
+  geom_point()+
+  geom_point(data=comt_facs_limma_q1_q2_input_cast_mat_cpm_aldex_dt[we.eBH<comt_facs_q1_q2_fdr_thresh], 
+             aes(x=effect, y=-1*log10(we.eBH)), col="firebrick")+
+  theme_cowplot()
+
+rm(comt_facs_q1_q2_aldex2_gg)
+
+comt_facs_limma_q1_q2_input_cast_mat_cpm_aldex_dt[,VAR_ID:=rownames(comt_facs_limma_q1_q2_input_cast_mat_cpm)]
+
+comt_facs_limma_q1_q2_input_cast_mat_cpm_aldex_merge_dt<- merge(
+  comt_facs_limma_q1_q2_input_cast_mat_cpm_aldex_dt, annot_dt, by="VAR_ID")
+
+comt_facs_q1_q2_aldex2_sig_gg<- ggplot(
+  data=comt_facs_limma_q1_q2_input_cast_mat_cpm_aldex_merge_dt[
+    we.eBH<comt_facs_q1_q2_fdr_thresh],
+  aes(x=effect, y=reorder(ID_SHORT, POS), fill=we.eBH, xmin=effect.low, xmax=effect.high))
+
+comt_facs_q1_q2_aldex2_sig_gg+
+  geom_bar(stat="identity", alpha=0.75)+
+  geom_errorbar(col="grey", width=0.3)+
+  scale_fill_viridis(option="D", begin=0.95, end=0.05)+
+  theme_cowplot()+
+  labs(y="", x="Effect size", fill="")+
+  theme(axis.text.y=element_text(size=8))
+
+rm(comt_facs_q1_q2_aldex2_sig_gg)
+
+# See if variants down in RNA are enriched in the variants up in P2 relative to P1
+comt_facs_limma_q1_q2_input_cast_mat_cpm_aldex_merge_rna_dt<- merge(
+  comt_facs_limma_q1_q2_input_cast_mat_cpm_aldex_merge_dt,
+  comt_rna_input_cast_mat_cpm_aldex_dt[,.(VAR_ID, effect, we.eBH)], by="VAR_ID")
+
+# comt_facs_q1_q2_fdr_thresh
+comt_facs_limma_q1_q2_input_cast_mat_cpm_aldex_merge_rna_dt[,Direction:=ifelse(effect.y>0, "RNA up", "RNA down")]
+comt_facs_limma_q1_q2_input_cast_mat_cpm_aldex_merge_rna_dt[we.eBH.y>=comt_rna_fdr_thresh, Direction:="N.S."]
+comt_facs_limma_q1_q2_input_cast_mat_cpm_aldex_merge_rna_dt[,Direction:=factor(Direction, levels=c("N.S.", "RNA down", "RNA up"))]
+
+rna_vs_facs1_gg<- ggplot(
+  data=comt_facs_limma_q1_q2_input_cast_mat_cpm_aldex_merge_rna_dt, 
+  aes(x=Direction, y=effect.x, fill=Direction))
+
+rna_vs_facs1_gg+
+  geom_boxplot(width=0.5, alpha=0.75, outlier.shape=NA)+
+  scale_fill_manual(values=c("grey", "firebrick", "deepskyblue4"))+
+  labs(x="cDNA:gDNA direction", y="P2:P1 effect", fill="")+
+  theme_cowplot()
+
+wilcox.test(effect.x~Direction, data=comt_facs_limma_q1_q2_input_cast_mat_cpm_aldex_merge_rna_dt[Direction!="N.S."])
+
+wilcox.test(effect.x~Direction, data=comt_facs_limma_q1_q2_input_cast_mat_cpm_aldex_merge_rna_dt[Direction!="RNA up"])
+
+# Results as expected 
+
+```
+
 ```{r COMT protein effect by amino acid property ALDEx2}
 
 comt_facs_q3_fdr_aa_type_thresh<- 0.1
@@ -10211,7 +9326,6 @@ comt_facs_rna_limma_input_cast_mat_cpm_aldex_merge_dt[,REF_ALT_TYPE:=paste(REF_T
 comt_facs_rna_limma_input_cast_mat_cpm_aldex_merge_dt[,AA_POS_key:=paste(REF_AA, AA_POS, sep="")]
 comt_facs_rna_limma_input_cast_mat_cpm_aldex_merge_dt[,AA_POS_key2:=paste(REF_AA, AA_POS, ALT_AA, sep="")]
 
-# ADD
 comt_protein_del_positions<- c(59, 62, 63, 66, 67, 136, 137, 139, 152, 153, 156, 157, 158)
 comt_protein_del_ids<- c("I59", "H62", "V63", "H66", "A67", "L136", "I137", "I139", "M152", "V153", "A156", "G157", "V158")
 comt_protein_del_silent_ids<- c("I59I", "H62H", "V63V", "H66H", "A67A", "L136L", "I137I", "I139I", "M152M", "V153V", "A156A", "G157G", "V158")
@@ -10245,6 +9359,10 @@ comt_facs_vs_aa_type_gg+
   theme(legend.position="bottom")
 
 rm(comt_facs_vs_aa_type_gg)
+
+# What mutations to nonpolar, uncharged amino acids are at I59, H62, H66
+#comt_facs_rna_limma_input_cast_mat_cpm_aldex_merge_aa_type_dt[AA_POS2%in%c(59,62,66) & Median_FACS_effect<0]
+# I59A, I59L, H62I, H62V, H62Y, H62F, H66V
 
 ```
 
@@ -10303,6 +9421,59 @@ comt_poly_f4_vs_protein_gg+
   labs(x="Poly F4 log FC", y="FACS log FC")
 
 rm(comt_poly_f4_vs_protein_gg)
+
+```
+
+```{r COMT protein versus polysome abundance ALDEx2}
+
+comt_poly_f3_vs_protein_dt<- merge(
+  comt_poly_f3_f4_input_cast_mat_cpm_aldex_merge_dt[Fraction=="F3", .(diff.btw, effect, we.eBH, VAR_ID, VAR_TYPE)],
+  comt_facs_all_limma_input_cast_mat_cpm_aldex_merge_dt[,.(diff.btw, effect, we.eBH, VAR_ID, Quadrant)], by="VAR_ID")
+
+comt_poly_f3_vs_protein_gg<- ggplot(
+  data=comt_poly_f3_vs_protein_dt, 
+  aes(x=effect.x, y=effect.y))
+
+comt_poly_f3_vs_protein_gg+
+  geom_point(alpha=0.3)+
+  facet_wrap(~Quadrant)+
+  geom_point(data=comt_poly_f3_vs_protein_dt[VAR_TYPE=="Silent"], 
+             aes(x=effect.x, y=effect.y), col="dodgerblue")+
+  geom_point(data=comt_poly_f3_vs_protein_dt[VAR_TYPE=="Nonsense"], 
+             aes(x=effect.x, y=effect.y), col="firebrick")+
+  geom_hline(yintercept=0, col="grey", linetype=2)+
+  geom_vline(xintercept=0, col="grey", linetype=2)+
+  theme_cowplot()+
+  labs(x="Poly F3 effect size", y="FC effect size")
+
+# No strong relationship with polysome F3
+
+rm(comt_poly_f3_vs_protein_gg)
+
+comt_poly_f4_vs_protein_dt<- merge(
+  comt_poly_f3_f4_input_cast_mat_cpm_aldex_merge_dt[Fraction=="F4", .(diff.btw, effect, we.eBH, VAR_ID, VAR_TYPE)],
+  comt_facs_all_limma_input_cast_mat_cpm_aldex_merge_dt[, .(diff.btw, effect, we.eBH, VAR_ID, Quadrant)], by="VAR_ID")
+
+comt_poly_f4_vs_protein_gg<- ggplot(
+  data=comt_poly_f4_vs_protein_dt, 
+  aes(x=effect.x, y=effect.y))
+
+comt_poly_f4_vs_protein_gg+
+  geom_point(alpha=0.3)+
+  facet_wrap(~Quadrant)+
+  geom_point(data=comt_poly_f4_vs_protein_dt[VAR_TYPE=="Silent"], 
+             aes(x=effect.x, y=effect.y), col="dodgerblue")+
+  geom_point(data=comt_poly_f4_vs_protein_dt[VAR_TYPE=="Nonsense"], 
+             aes(x=effect.x, y=effect.y), col="firebrick")+
+  geom_hline(yintercept=0, col="grey", linetype=2)+
+  geom_vline(xintercept=0, col="grey", linetype=2)+
+  theme_cowplot()+
+  labs(x="Poly F4 effect size", y="FC effect size")
+
+rm(comt_poly_f4_vs_protein_gg)
+
+#comt_poly_f4_vs_protein_dt[Quadrant=="Q1", cor.test(effect.x, effect.y, method="spearman")]
+#comt_poly_f4_vs_protein_dt[Quadrant=="Q1", cor.test(diff.btw.x, diff.btw.y, method="spearman")]
 
 ```
 
@@ -10464,7 +9635,7 @@ rm(comt_multilayer_f4_p3_gg)
 ```
 
 
-# Multi-layer expression analysis with unsupervised ML
+# Integrated analysis
 
 ```{r COMT multilayer hierarchical clustering ALDEx2}
 
@@ -10530,9 +9701,11 @@ comt_all_expr_aldex_merge_dt[is.na(ID_SHORT), ID_SHORT:=ID_SHORT.y]
 # Filter out columns not used
 comt_all_expr_aldex_merge_dt<- comt_all_expr_aldex_merge_dt[
   ,.(ROI, VAR_ID, POS, REF, ALT, REF_CODON, ALT_CODON, AA_POS, AA_POS2, REF_AA, ALT_AA, AA_CHANGE, VAR_TYPE, TYPE, ID_SHORT, Fraction,
-     effect, effect.x, effect.y, diff.btw, diff.btw.x, diff.btw.y, we.eBH, we.eBH.x, we.eBH.y, 
+     effect, effect.low, effect.high, effect.x, effect.low.x, effect.high.x, effect.y, effect.low.y, effect.high.y,
+     diff.btw, diff.btw.x, diff.btw.y, we.eBH, we.eBH.x, we.eBH.y, 
      Wu_REF_CSC, Wu_ALT_CSC , Wu_CSC_diff, Narula_REF_CSC, Narula_ALT_CSC, Narula_CSC_diff, 
      Narula_ALT_Asite, Narula_REF_Asite, Narula_ALT_Psite, Narula_REF_Psite, Narula_Asite_diff, Narula_Psite_diff,
+     Wu_REF_21nt_CHXTIG, Wu_ALT_21nt_CHXTIG, Wu_21nt_CHXTIG_diff,
      REF_CODON_hydro_log2_sum, ALT_CODON_hydro_log2_sum, hydro_log2_sum_diff, 
      REF_CODON_mim_log2_sum, ALT_CODON_mim_log2_sum, mim_log2_sum_diff,
      d_max, d_max_pval, r_min, r_min_pval)]
@@ -10541,9 +9714,7 @@ write.table(comt_all_expr_aldex_merge_dt, paste(comt_res_base_dir, "ALDEx2_resul
 
 # effect is P3 enrichment, effect.x is RNA enrichment, effect.y is F3 or F4 enrichment
 
-# Filter again for any significant variant for RNA, poly; and only significant, enriched nonsense variants
-#comt_all_expr_aldex_merge_sig_dt<- comt_all_expr_aldex_merge_dt[
-#effect > 0 & (we.eBH < multilayer_rna_fdr_thresh | we.eBH.x < multilayer_poly_protein_fdr_thresh | we.eBH.y < multilayer_poly_protein_fdr_thresh)]
+# Filter again for any significant variant for RNA, poly; and only significant, enriched protein variants
 
 comt_all_expr_aldex_merge_sig_dt<- comt_all_expr_aldex_merge_dt[
 (we.eBH < multilayer_poly_protein_fdr_thresh & effect > 0) | 
@@ -10614,8 +9785,6 @@ comt_all_expr_aldex_merge_dt[Fraction=="F3", cor.test(effect, y=d_max, use="comp
 comt_all_expr_aldex_merge_dt[Fraction=="F4", cor.test(effect.x, y=r_min, use="complete.obs", method="spearman")]
 comt_all_expr_aldex_merge_dt[Fraction=="F4", cor.test(effect, y=r_min, use="complete.obs", method="spearman")]
 
-# Yes
-
 # Does filtering for significant variants in terms of effect size or predicted folding strengthen the association?
 comt_all_expr_aldex_merge_dt[Fraction=="F4" & we.eBH.x < 0.2, cor.test(effect.x, y=d_max, use="complete.obs", method="spearman")]
 comt_all_expr_aldex_merge_dt[Fraction=="F4" & we.eBH < 0.2, cor.test(effect, y=d_max, use="complete.obs", method="spearman")]
@@ -10623,28 +9792,6 @@ comt_all_expr_aldex_merge_dt[Fraction=="F4" & we.eBH < 0.2, cor.test(effect, y=d
 # After filtering on significant of the effect, only protein correlation remains
 comt_all_expr_aldex_merge_dt[
   Fraction=="F4" & we.eBH < 0.1 & d_max_pval < 0.15, cor.test(effect, y=d_max, use="complete.obs", method="spearman")]
-
-# Iterate over FDR and p-value thresholds and determine best correlation between distance and effect size
-pval_thresholds<- seq(0.1, 1, 0.05)
-protein_struct_mat<- matrix(data=0, nrow=length(pval_thresholds), ncol=length(pval_thresholds))
-
-for(i in 1:length(pval_thresholds)){
-  for(j in 1:length(pval_thresholds)){
-    protein_struct_mat[i,j]<- comt_all_expr_aldex_merge_dt[
-      Fraction=="F4" & we.eBH < pval_thresholds[i] & d_max_pval < pval_thresholds[j], cor(
-        effect, y=d_max, use="complete.obs", method="spearman")]
-  }
-}
-
-rna_struct_mat<- matrix(data=0, nrow=length(pval_thresholds), ncol=length(pval_thresholds))
-
-for(i in 1:length(pval_thresholds)){
-  for(j in 1:length(pval_thresholds)){
-    rna_struct_mat[i,j]<- comt_all_expr_aldex_merge_dt[
-      Fraction=="F4" & we.eBH.x < pval_thresholds[i] & d_max_pval < pval_thresholds[j], cor(
-        effect.x, y=d_max, use="complete.obs", method="spearman")]
-  }
-}
 
 comt_all_expr_aldex_merge_dt[,Protein_del:=ifelse(effect>0, "True", "False")]
 comt_all_expr_aldex_merge_dt[,RNA_del:=ifelse(effect.x<0, "True", "False")]
@@ -10659,6 +9806,44 @@ protein_vs_struct_gg+
   theme_cowplot()
 
 comt_all_expr_aldex_merge_dt[Fraction=="F4" & we.eBH < 0.1 & d_max_pval < 0.15, wilcox.test(effect~Protein_del)]
+
+# Is this due to MNPs versus SNPs?
+# e.g. MNPs more likely to be nonsynonymous, which are more likely to be deleterious, and potentially more likely to alter structure?
+
+protein_vs_struct_gg<- ggplot(
+  data=comt_all_expr_aldex_merge_dt[Fraction=="F4" & we.eBH < 0.1 & d_max_pval < 0.15],
+  aes(x=Protein_del, y=d_max))
+
+protein_vs_struct_gg+
+  geom_boxplot(outlier.shape=NA, fill="steelblue", alpha=0.75, width=0.5)+
+  geom_jitter(width=0.1, aes(col=TYPE))+
+  scale_color_aaas()+
+  theme_cowplot()
+
+# Most variants in both cases are MNPs
+# Does this hold if we look at P1?
+
+comt_facs_q1_limma_input_cast_mat_cpm_aldex_merge_dt[
+  ,SNP:=varid_to_rnasnp(POS, REF, ALT), by=seq_len(nrow(
+    comt_facs_q1_limma_input_cast_mat_cpm_aldex_merge_dt))]
+
+comt_facs_q1_limma_input_cast_mat_cpm_aldex_merge_rnasnp_dt<- merge(
+  comt_facs_q1_limma_input_cast_mat_cpm_aldex_merge_dt, rnasnp_res_dt, by="SNP")
+
+comt_facs_q1_limma_input_cast_mat_cpm_aldex_merge_rnasnp_dt[,Protein_del:=ifelse(effect<0, "True", "False")]
+
+protein_vs_struct_gg<- ggplot(
+  data=comt_facs_q1_limma_input_cast_mat_cpm_aldex_merge_rnasnp_dt[we.eBH < 0.15 & d_max_pval < 0.15],
+  aes(x=Protein_del, y=d_max))
+
+protein_vs_struct_gg+
+  geom_boxplot(outlier.shape=NA, fill="steelblue", alpha=0.75, width=0.5)+
+  geom_jitter(width=0.1)+
+  theme_cowplot()
+
+rm(protein_vs_struct_gg)
+
+# Trend holds if looking at either P3 or P1
 
 ```
 
@@ -10726,7 +9911,7 @@ som_input_mat<- comt_rep_summ_cast_nona_iqlr_mat_filt_center
 # Determine best seed of 500 for minimizing mean distances
 som_nunits<- round(5 * sqrt(nrow(som_input_mat)))
 
-# Bump to 260 to to have more balanced factors
+# Bump to 260 to have integer dimensions
 # 260 = 13 * 20
 
 som_xdim<- 13
@@ -10735,7 +9920,6 @@ som_topo<- "hexagonal"
 som_toroid<- TRUE
 
 # Determine an optimal seed based on minimization of distances of each object to its respective codebook vector
-# 300
 determine_som_best_seed<- function(dat_mat, nseeds=500, xdim=som_xdim, ydim=som_ydim, topo=som_topo, is_toroidal=som_toroid){
   
   mean_distances<- vector(mode="numeric", length=nseeds)
@@ -10800,14 +9984,19 @@ iqlr_multilayer_som_codes_melt_dt<- melt(
   iqlr_multilayer_som_codes_dt, id.vars="Cluster", 
   variable.name="Layer", value.name="Scaled_IQLR")
 
+# Invert the IQLRs for FC P3
+iqlr_multilayer_som_codes_melt_dt[Layer=="FACS.3", Scaled_IQLR:=-1*Scaled_IQLR]
+
 iqlr_multilayer_som_codes_melt_gg<- ggplot(
   data=iqlr_multilayer_som_codes_melt_dt, 
   aes(x=Layer, y=Cluster, fill=Scaled_IQLR))
 
 iqlr_multilayer_som_codes_melt_gg+
   geom_tile()+
-  scale_fill_gradient2(low=scales::muted("#276419"), mid='white', high=scales::muted("#8E0152"))+
+  scale_fill_gradient2(high=scales::muted("#276419"), mid='white', low=scales::muted("#8E0152"))+
   theme_cowplot()
+
+rm(iqlr_multilayer_som_codes_melt_gg)
              
 # Determine variants enriched in each cluster
 iqlr_multilayer_som_var_dt<- data.table(
@@ -10849,6 +10038,8 @@ som_ap_cluster_vartype_counts_gg+
   labs(x="AP cluster", y="log2 variants + 1", fill="")+
   theme_cowplot()
 
+rm(som_ap_cluster_vartype_counts_gg)
+
 # Plot proportions
 iqlr_multilayer_som_counts_summ_dt[,AP_cluster:=factor(AP_cluster)]
 
@@ -10858,18 +10049,18 @@ iqlr_multilayer_som_var_merge_annot_summ_melt_nvars_dt<- merge(
 
 iqlr_multilayer_som_var_merge_annot_summ_melt_nvars_dt[,Proportion:=N/N_variants]
 
-som_ap_cluster_vartype_counts_gg<- ggplot(
+som_ap_cluster_vartype_proportion_gg<- ggplot(
   data=iqlr_multilayer_som_var_merge_annot_summ_melt_nvars_dt, 
   aes(x=AP_cluster, y=Proportion, fill=VAR_TYPE))
 
-som_ap_cluster_vartype_counts_gg+
+som_ap_cluster_vartype_proportion_gg+
   geom_bar(stat="identity", position="dodge")+
   scale_fill_manual(values=jco_cols)+
   scale_x_discrete(drop=FALSE)+
   labs(x="AP cluster", y="Proportion variants", fill="")+
   theme_cowplot()
   
-rm(som_ap_cluster_vartype_counts_gg)
+rm(som_ap_cluster_vartype_proportion_gg)
 
 # Determine which missense variants are in the cluster with high proportion of nonsense variants
 # Amino acid positions I59 and A67 stand out
@@ -10965,9 +10156,7 @@ comt_rep_summ_cast_nona_iqlr_mat_filt_center_melt_rnasnp_dt[ID_SHORT%in%missense
 ```
 
 
-## GnomAD variants and cDNA altering variants
-
-According to gnomAD o/e value COMT is not highly constrained.
+# GnomAD variants
 
 ```{r gnomAD variants}
   
