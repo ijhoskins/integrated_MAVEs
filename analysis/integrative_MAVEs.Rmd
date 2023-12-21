@@ -1,7 +1,7 @@
 ---
 title: "COMT integrated MAVEs"
 author: "Ian Hoskins"
-date: "10/31/2023"
+date: "12/19/2023"
 output:
   html_document:
     df_print: paged
@@ -37,12 +37,13 @@ library(ALDEx2)
 library(gplots)
 library(ggcoverage)
 library(rtracklayer)
+library(TFBSTools)
 
 source("https://raw.githubusercontent.com/ijhoskins/satmut_utils/satmut_utils_dev/src/prototype/summarization_utils.r")
 source("https://raw.githubusercontent.com/ijhoskins/satmut_utils/satmut_utils_dev/src/prototype/modeling_utils.r")
 
 data_dir<- "/tmp/integrative_MAVEs.tar.gz"
-base_file<- download.file("https://zenodo.org/records/10059317/files/integrative_MAVEs.tar.gz?download=1", destfile=data_dir, method="curl", mode="wb")
+base_file<- download.file("https://zenodo.org/records/10403931/files/integrative_MAVEs_submit.tar.gz?download=1", destfile=data_dir, method="curl", mode="wb")
 untar(data_dir, exdir="/tmp")
 comt_base_dir<- "/tmp/integrative_MAVEs_submit"
 
@@ -81,6 +82,7 @@ codon_data_dir<- paste(comt_base_dir, "codon_data", sep="/")
 demask_dir<- paste(comt_base_dir, "DeMaSk", sep="/")
 esm1b_dir<- paste(comt_base_dir, "ESM1b", sep="/")
 gnomad_dir<- paste(comt_base_dir, "gnomAD", sep="/")
+tfbs_dir<- paste(comt_base_dir, "TFBS", sep="/")
 
 # Mutagenesis region was defined initially as a 64 codon region
 grch38_roi1_mutagenesis_coords<- seq(19962644, 19962748)
@@ -115,12 +117,6 @@ sam_aa_pos<- c(119, 120, 90, 91, 118, 143, 42, 72, 141, 68)
 roi1_rgb<- rgb(110, 0, 98, maxColorValue=255)
 roi2_rgb<- rgb(53, 96, 141, maxColorValue=255)
 roi_cols<- c(roi1_rgb, roi2_rgb)
-
-clr<- function(x){
-  x_geommean<- exp(mean(log(x))) 
-  res<- log(x) - log(x_geommean)
-  return(res)
-}
 
 reclose_coda<- function(x){
   reclosed<- x/sum(x, na.rm=TRUE)
@@ -1073,25 +1069,27 @@ comt_utr5_mutants_fc_gg+
 
 # COMT ribosome profiling
 
-```{r COMT convential and targeted RP}
+```{r COMT ribosome profiling}
 
-# In this experiment, cells were treated with both CHX and ANS at 100 µg/mL. Both conventional and targeted (i.e. selective) ribosome profiling against the Flag tag were performed. For targeted RP two conditions were used: 100 µL and 400 µL Agarose M2 anti-Flag beads in pulldown.
+ribofile<- Ribo(paste(comt_rp_dir, "20210607-conventional.ribo", sep="/"))
 
-trp_trial4_ribofile<- Ribo(paste(comt_rp_dir, "20210607_COMT.ribo", sep="/"))
+reads_post_dedup<- experiment_info(ribofile)$total.reads
+names(reads_post_dedup)<- experiment_info(ribofile)$experiment
 
-reads_post_dedup<- experiment_info(trp_trial4_ribofile)$total.reads
-names(reads_post_dedup)<- experiment_info(trp_trial4_ribofile)$experiment
-
-reference_names<- get_reference_names(trp_trial4_ribofile)
+reference_names<- get_reference_names(ribofile)
 comt_reference_name<- reference_names[grepl("COMT-202", reference_names)]
 
 # Stop coordinate considers 24 nt Flag tag after start codon
 comt_cds_start<- 252
 comt_cds_stop<- 1805
 comt_cds_positions<- seq(comt_cds_start,comt_cds_stop)
+comt_roi1_positions<- seq(393,497)
+comt_roi2_positions<- seq(681,749)
 
 # Offset determined by examining stop codon metagene plot
-psite_fiveprime_offset<- 13
+asite_fiveprime_offset<- 16
+psite_fiveprime_offset<- asite_fiveprime_offset - 3
+esite_fiveprime_offset<- psite_fiveprime_offset - 3
 mean_rpf_length<- 32
 
 # about 30 codons/AAs
@@ -1105,289 +1103,105 @@ max_rpf_len<- 35
 
 ```
 
-```{r RP QC}
+```{r COMT ribosome profiling QC}
 
-region.counts<- get_length_distribution(
-  ribo.object=trp_trial4_ribofile,
+region.lengths<- get_length_distribution(
+  ribo.object=ribofile,
   region="CDS", range.lower=15, range.upper=40)
 
-plot_length_distribution(region.counts, fraction=TRUE)
+plot_length_distribution(region.lengths, fraction=TRUE)
 
-plot_region_counts(trp_trial4_ribofile, range.lower=min_rpf_len, range.upper=max_rpf_len)
+plot_region_counts(ribofile, range.lower=min_rpf_len, range.upper=max_rpf_len)
 
-plot_metagene(trp_trial4_ribofile,
+plot_metagene(ribofile,
               site="start", normalize=TRUE, title="Metagene start coverage",
-              experiment=experiments(trp_trial4_ribofile))
+              experiment=experiments(ribofile),
+              range.lower=min_rpf_len, range.upper=max_rpf_len)
 
-plot_metagene(trp_trial4_ribofile,
+plot_metagene(ribofile,
               site="stop",  normalize=TRUE, title="Metagene stop coverage",
-              experiment=experiments(trp_trial4_ribofile))
+              experiment=experiments(ribofile),
+              range.lower=min_rpf_len, range.upper=max_rpf_len)
+
+```
+
+```{r COMT ribosome profiling coverage of ROIs}
 
 comt_coverage_dt<- as.data.table(
   get_coverage(
-    ribo.object=trp_trial4_ribofile,
+    ribo.object=ribofile,
     range.lower=min_rpf_len, range.upper=max_rpf_len,
     name=comt_reference_name, length=TRUE, tidy=TRUE))
 
 comt_coverage_dt[,position:=as.integer(position)]
 
-comt_coverage_cds_nonzero_dt<- comt_coverage_dt[
-  count>0 & position%in%seq(comt_cds_start, comt_cds_stop)]
+comt_coverage_dt[,Reads_post_dedup:=reads_post_dedup]
+comt_coverage_dt[,CPM:=count/(Reads_post_dedup/1000000)]
 
-comt_coverage_cds_nonzero_sum_dt<- comt_coverage_cds_nonzero_dt[
-  ,.(Sum_counts=sum(count)),by=.(experiment)]
+# Determine cutoff for marking pause sites at > 95% of CPM in CDS
+comt_coverage_quantiles<- comt_coverage_dt[position%in%comt_cds_positions, quantile(CPM, probs=seq(0,1,0.05))]
 
-comt_coverage_cds_nonzero_sum_dt[,Reads_post_dedup:=reads_post_dedup]
-comt_coverage_cds_nonzero_sum_dt[,CPM:=Sum_counts/(Reads_post_dedup/1000000)]
+# Plot footprints at the H62-V63 hotspot and other locations 
+# significant in polysome profiling experiments
 
-comt_coverage_cds_nonzero_gg<- ggplot(
-  data=comt_coverage_cds_nonzero_sum_dt, 
-  aes(x=experiment, y=CPM))
-
-comt_coverage_cds_nonzero_gg+
-  geom_bar(stat="identity")+
-  labs(x="Sample", y="Sum CPM")+
-  theme_cowplot()
-
-# Instead of normalizing to total unique reads, normalize to CPM after read length filtering
-all_region_counts_dt<- as.data.table(
-  get_region_counts(
-    ribo.object=trp_trial4_ribofile,
-    range.lower=min_rpf_len, range.upper=max_rpf_len, region=c("CDS"),
-    length=TRUE, tidy=TRUE, normalize=TRUE, transcript=FALSE))
-
-comt_coverage_cds_sum_dt<- all_region_counts_dt[
-  transcript==comt_reference_name, .(experiment, count)]
-
-comt_coverage_cds_nonzero_gg<- ggplot(
-  data=all_region_counts_dt[transcript==comt_reference_name, .(experiment, count)], 
-  aes(x=experiment, y=count))
-
-comt_coverage_cds_nonzero_gg+
-  geom_bar(stat="identity")+
-  scale_color_manual(values=three_cols)+
-  labs(x="Sample", y="Sum CPM")+
-  theme_cowplot()
-
-# This rescues counts for the targeted RP samples relative to conventional, indicating
-# a higher proportion of reads in the conventional RP are short
-rm(comt_coverage_cds_nonzero_gg)
-
-```
-
-```{r RP COMT expression}
-
-control_ref_names<- sort(reference_names[grepl("ACTB-217|CHMP2A-206|GAPDH-205|GPI-201|OAZ1-211|PSMB2-201|VCP-201", reference_names)])
-
-psmb2_coverage_dt<- as.data.table(
-  get_coverage(
-    ribo.object=trp_trial4_ribofile,
-    range.lower=min_rpf_len, range.upper=max_rpf_len,
-    name=control_ref_names[3], length=TRUE, tidy=TRUE))
-
-oaz1_coverage_dt<- as.data.table(
-  get_coverage(
-    ribo.object=trp_trial4_ribofile,
-    range.lower=min_rpf_len, range.upper=max_rpf_len,
-    name=control_ref_names[6], length=TRUE, tidy=TRUE))
-
-gpi_coverage_dt<- as.data.table(
-  get_coverage(
-    ribo.object=trp_trial4_ribofile,
-    range.lower=min_rpf_len, range.upper=max_rpf_len,
-    name=control_ref_names[1], length=TRUE, tidy=TRUE))
-
-gapdh_coverage_dt<- as.data.table(
-  get_coverage(
-    ribo.object=trp_trial4_ribofile,
-    range.lower=min_rpf_len, range.upper=max_rpf_len,
-    name=control_ref_names[4], length=TRUE, tidy=TRUE))
-
-actb_coverage_dt<- as.data.table(
-  get_coverage(
-    ribo.object=trp_trial4_ribofile,
-    range.lower=min_rpf_len, range.upper=max_rpf_len,
-    name=control_ref_names[7], length=TRUE, tidy=TRUE))
-
-all_coverage_dt<- rbind(comt_coverage_dt, psmb2_coverage_dt, oaz1_coverage_dt, 
-                        gpi_coverage_dt, gapdh_coverage_dt, actb_coverage_dt)
-
-all_trx<- c("COMT", "PSMB2", "OAZ1", "GPI", "GAPDH", "ACTB")
-
-all_coverage_dt[,Gene:=rep(all_trx, times=c(
-  nrow(comt_coverage_dt), nrow(psmb2_coverage_dt), nrow(oaz1_coverage_dt), 
-  nrow(gpi_coverage_dt), nrow(gapdh_coverage_dt), nrow(actb_coverage_dt)))]
-
-rm(list=c("comt_coverage_dt", "psmb2_coverage_dt", "oaz1_coverage_dt", "gpi_coverage_dt", "gapdh_coverage_dt", "actb_coverage_dt"))
-
-all_coverage_dt[,position:=as.integer(position)]
-
-all_coverage_sum_dt<- all_coverage_dt[
-  ,.(Sum_counts=sum(count)),by=.(experiment, Gene)]
-
-all_coverage_sum_dt[,Reads_post_dedup:=rep(reads_post_dedup,times=length(all_trx))]
-all_coverage_sum_dt[,CPM:=Sum_counts/(Reads_post_dedup/1000000)]
-
-comt_expr_gg<- ggplot(
-  data=all_coverage_sum_dt, 
-  aes(x=Gene, y=CPM, fill=experiment))
-
-comt_expr_gg+
-  geom_bar(stat="identity", position="dodge", alpha=0.75)+
-  labs(x="Transcript", y="CPM, sum all positions", fill="Sample")+
-  scale_fill_aaas()+
-  theme_cowplot()+
-  theme(legend.position="bottom")
-
-comt_cds_cov_dt<- all_coverage_dt[experiment=="20210607-FlagCOMT-400uL" & Gene=="COMT" & 
-                                   position<=comt_cds_stop & position>=comt_cds_start]
-
-comt_expr_gg<- ggplot(
-  data=comt_cds_cov_dt, 
-  aes(x=position, y=count))
-
-comt_expr_gg+
-  geom_point(alpha=0.5)+
-  scale_color_manual(values=two_cols[1])+
-  labs(x="COMT transcript position", y="RPF counts")+
-  theme_cowplot()
-
-rm(comt_expr_gg)
-
-```
-
-```{r RP COMT coverage}
-
-comt_cov_by_pos_dt<- all_coverage_dt[Gene=="COMT",]
-comt_cov_by_pos_dt[,Reads_post_dedup:=rep(reads_post_dedup, nrow(comt_cov_by_pos_dt)/3)]
-comt_cov_by_pos_dt[,CPM:=count/(Reads_post_dedup/1000000)]
-
-comt_cov_by_pos_cast_dt<- dcast(
-  data=comt_cov_by_pos_dt, formula=Gene + position ~ experiment, 
-  value.var="CPM")
-
-comt_cov_by_pos_cast_dt[,CPM_diff:=`20210607-FlagCOMT-400uL` - `20210607-conventional`]
-
-cov_spearman_cor<- comt_cov_by_pos_cast_dt[
-  ,cor(`20210607-FlagCOMT-400uL`, `20210607-conventional`, method="spearman")]
-
-cov_pearson_cor<- comt_cov_by_pos_cast_dt[
-  ,cor(log10(`20210607-FlagCOMT-400uL`+1), log10(`20210607-conventional`+1))]
-
-# comt normalized coverage in T-RP - C-RP CPM diff, nonzero positions plotted
-comt_cov_by_pos_gg<- ggplot(
-  data=comt_cov_by_pos_cast_dt[CPM_diff!=0],
-  aes(x=log10(position), y=CPM_diff))
-
-comt_cov_by_pos_gg+
-  geom_hline(yintercept=0, col="grey", linetype=2)+
-  geom_point(alpha=0.5)+
-  geom_smooth(method="loess", col="firebrick")+
-  labs(x="log10 transcript position",
-       y="Flag-COMT T-RP:C-RP CPM diff.")+
-  theme_cowplot()
-
-# Coverage by position for T-RP only, nonzero positions
-comt_cov_by_pos_gg<- ggplot(
-  data=comt_cov_by_pos_cast_dt[CPM_diff!=0],
-  aes(x=log10(position), y=`20210607-FlagCOMT-400uL`))
-
-comt_cov_by_pos_gg+
-  geom_hline(yintercept=0, col="grey", linetype=2)+
-  geom_point(alpha=0.5)+
-  geom_smooth(method="loess", col="firebrick")+
-  labs(x="log10 transcript position", y="Flag-COMT T-RP CPM")+
-  theme_cowplot()
-
-rm(comt_cov_by_pos_gg)
-
-# Show mirror plots for T-RP vs. C-RP
-comt_cov_by_pos_cast_dt[,CRP_mirror:=-1*`20210607-conventional`]
-
-# Bin positions to show position enrichment more clearly
-comt_cov_by_pos_cast_dt[position%in%comt_cds_positions,
-                       Pos_bin:=cut(position, dig.lab=10, 
-                                    breaks=round(quantile(position, probs=seq(0,1,0.1))))]
-
-comt_cov_by_pos_cast_melt_dt<- melt(
-  data=comt_cov_by_pos_cast_dt, 
-  id.vars=c("Gene", "position", "Pos_bin"), 
-  measure.vars=c("20210607-FlagCOMT-400uL", "CRP_mirror"), 
-  variable.name="Experiment", value.name="CPM")
-
-comt_cov_by_pos_cast_melt_dt[grepl("FlagCOMT", Experiment), Experiment_clean:="T-RP"]
-comt_cov_by_pos_cast_melt_dt[is.na(Experiment_clean), Experiment_clean:="C-RP"]
-comt_cov_by_pos_cast_melt_dt[,Experiment_clean:=as.factor(Experiment_clean)]
-
-comt_cov_by_pos_mirror_gg<- ggplot(
-  data=comt_cov_by_pos_cast_melt_dt[!is.na(Pos_bin)],
-  aes(x=position, y=CPM, col=Experiment_clean))
-
-comt_cov_by_pos_mirror_gg+
-  facet_wrap(~Pos_bin, ncol=5, scales="free_x")+
-  geom_point(alpha=0.75)+
-  scale_color_manual(values=two_cols)+
-  labs(x="Transcript position", y="CPM", col="Method")+
-  theme_cowplot()+
-  theme(legend.position="bottom",
-        axis.text.x=element_text(angle=90))
-
-rm(comt_cov_by_pos_mirror_gg)
-
-# Plot footprints at the H62-V63 hotspot
-# 393 is start of ROI_1, 483 is end
-# 459 is Flag-adjusted position of H62 in the CDS
-# N71 is at pos 486
-# S74 is at pos 495
 # M51 is at pos 426
+# H62 is at pos 459
+# N71 is at pos 486
+# Q73 is at pos 492
+# S74 is at pos 495
 
+comt_cov_roi1_positions<- c(426, 459, 486, 492, 495)
 
-# 446 (459 - 13) is P-site adjusted 5' end for H62
-# 473 N71
-# 495 S74
-# 413 M51
+# A-site offset is 16, so E-site offset is 10
+comt_cov_roi1_esite_positions<- comt_cov_roi1_positions - esite_fiveprime_offset
 
-comt_cov_by_pos_cast_melt_dt[Experiment_clean=="C-RP", CPM:=-1*CPM]
 
 # ROI_1
-comt_cov_rna_hotspot_gg<- ggplot(
-  data=comt_cov_by_pos_cast_melt_dt[Pos_bin=="(407,563]" & Experiment_clean=="C-RP"],
-  aes(x=position, y=CPM))
+comt_cov_roi1_gg<- ggplot(
+  data=comt_coverage_dt[position%in%comt_roi1_positions], aes(x=position, y=CPM))
 
-# Convert marks to A-site adjusted locations
-comt_cov_rna_hotspot_gg+
-  geom_vline(xintercept=c(413,446,473,482)+3, col="grey", linetype=2)+
+# Vertical lines are E-site adjusted locations
+comt_cov_roi1_gg+
+  geom_vline(xintercept=comt_cov_roi1_esite_positions, col="grey", linetype=2)+
+  geom_hline(yintercept=comt_coverage_quantiles["90%"], col="grey", linetype=2)+
   geom_point(alpha=0.75, size=2)+
-  coord_cartesian(xlim=c(408,495))+
-  scale_x_continuous(breaks=seq(407,494,6))+
+  coord_cartesian(xlim=c(393,497-esite_fiveprime_offset))+
+  scale_x_continuous(breaks=seq(393,497-esite_fiveprime_offset,12))+
   scale_color_manual(values=two_cols)+
   labs(x="Transcript position", y="CPM", col="Method")+
   theme_cowplot()
+
+rm(comt_cov_roi1_gg)
 
 # ROI_2
 # 681 is ROI_2 start, 750 is end
 # M152 is 729, V158 is 750
 # Plot V158 position
-comt_cov_rna_hotspot_gg<- ggplot(
-  data=comt_cov_by_pos_cast_melt_dt[Pos_bin%in%c("(563,718]", "(718,873]") & Experiment_clean=="C-RP"],
-  aes(x=position, y=CPM))
 
-# Convert marks to A-site adjusted locations
-comt_cov_rna_hotspot_gg+
-  geom_vline(xintercept=c(716+3), col="grey", linetype=2)+
+comt_cov_roi2_positions<- c(729, 750)
+comt_cov_roi2_esite_positions<- comt_cov_roi2_positions - esite_fiveprime_offset
+
+comt_cov_roi2_gg<- ggplot(
+  data=comt_coverage_dt[position%in%comt_roi2_positions], aes(x=position, y=CPM))
+
+# Convert marks to E-site adjusted locations
+comt_cov_roi2_gg+
+  geom_vline(xintercept=comt_cov_roi2_esite_positions, col="grey", linetype=2)+
+  geom_hline(yintercept=comt_coverage_quantiles["90%"], col="grey", linetype=2)+
   geom_point(alpha=0.75, size=2)+
-  coord_cartesian(xlim=c(681,750), ylim=c(0,10))+
-  scale_x_continuous(breaks=seq(677,749,6))+
+  coord_cartesian(xlim=c(681,749), ylim=c(0,10))+
+  scale_x_continuous(breaks=seq(683,743,12))+
   scale_color_manual(values=two_cols)+
   labs(x="Transcript position", y="CPM", col="Method")+
   theme_cowplot()
 
-rm(comt_cov_rna_hotspot_gg)
+rm(comt_cov_roi2_gg)
 
 ```
 
-```{r RP COMT coverage in UTR5}
+```{r COMT ribosome profiling coverage of UTR5}
 
+psite_fiveprime_offset<- 13
 uorf_a_pos<- 178  # GCTTTG[CTG]CCG
 uorf_b_pos<- 224  # AGAGGG[CTG]GAG
 comt_membrane_start<- comt_cds_start  # TTGAAG[ATG]GAC
@@ -1406,126 +1220,29 @@ comt_utr5_cds_positions_zoom<- seq(0,comt_cytosolic_start+240)
 mcherry_utr5_cds_positions<- seq(mcherry_start-90, mcherry_start+90)
 
 # First look at the signal in the 5' UTR, CDS, and downstream IRES for the conventional RP sample
-comt_cov_by_pos_zoom_dt<- comt_cov_by_pos_dt[
-    experiment=="20210607-conventional" & position%in%comt_utr5_cds_positions_zoom,]
+comt_cov_by_pos_zoom_dt<- comt_coverage_dt[position%in%comt_utr5_cds_positions_zoom,]
 
 # 5' RPF ends plotted with start codons/offsets marked with vertical lines
 comt_cov_by_pos_gg<- ggplot(
   data=comt_cov_by_pos_zoom_dt,
   aes(x=position, y=CPM))
 
-asite_fiveprime_offset<- 16
-psite_fiveprime_offset<- asite_fiveprime_offset - 3
 comt_orf_5prime_adj_pos<- comt_orf_starts - psite_fiveprime_offset
 comt_uorf_5prime_adj_pos<- comt_uorf_starts - psite_fiveprime_offset
-
-comt_cov_by_pos_gg+
-  geom_vline(xintercept=comt_orf_5prime_adj_pos, col="darkorange", linetype=2)+
-  geom_vline(xintercept=comt_uorf_5prime_adj_pos, col="pink", linetype=2)+
-  geom_point(alpha=0.75, size=2)+
-  geom_smooth(span=0.2, se=FALSE)+
-  scale_x_continuous(breaks=seq(0,660,30))+
-  scale_color_manual(values=two_cols[1])+
-  labs(x="Transcript position", y="CPM")+
-  theme_cowplot()+
-  theme(axis.text.x=element_text(angle=90))
-
-# Suggests initiation at uORF_A and membrane isoform
-# possibly initiation at uORF_B
 
 # Zoom in to uORF and cORF start codons
 comt_cov_by_pos_gg+
   geom_vline(xintercept=comt_orf_5prime_adj_pos, col="darkorange", linetype=2)+
   geom_vline(xintercept=comt_uorf_5prime_adj_pos, col="pink", linetype=2)+
   geom_point(alpha=0.75, size=2)+
-  geom_smooth(span=0.2, se=FALSE)+
   scale_x_continuous(breaks=seq(0,700,30))+
   coord_cartesian(xlim=c(60, 450))+
   scale_color_manual(values=two_cols[1])+
   labs(x="Transcript position", y="CPM")+
   theme_cowplot()
 
-comt_cov_by_pos_gg+
-  geom_vline(xintercept=comt_orf_5prime_adj_pos, col="darkorange", linetype=2)+
-  geom_vline(xintercept=comt_uorf_5prime_adj_pos, col="pink", linetype=2)+
-  geom_point(alpha=0.75, size=2)+
-  scale_x_continuous(breaks=seq(0,700,3))+
-  coord_cartesian(xlim=c(200, 250))+
-  scale_color_manual(values=two_cols[1])+
-  labs(x="Transcript position", y="CPM")+
-  theme_cowplot()
-
-# -12 nt difference between expected p site site and signal
-# -8-9 bp from expected cORF start and signal
-
-# Look for disomes with leading ribosome having open A site
-comt_cov_by_pos_gg<- ggplot(
-  data=comt_cov_by_pos_zoom_dt,
-  aes(x=position, y=CPM))
-
-psite_fiveprime_offset<- 45
-comt_orf_5prime_adj_pos<- comt_orf_starts - psite_fiveprime_offset
-comt_uorf_5prime_adj_pos<- comt_uorf_starts - psite_fiveprime_offset
-
-comt_cov_by_pos_gg+
-  geom_vline(xintercept=comt_orf_5prime_adj_pos, col="darkorange", linetype=3)+
-  geom_vline(xintercept=comt_uorf_5prime_adj_pos, col="pink", linetype=3)+
-  geom_point(alpha=0.75, size=2)+
-  geom_smooth(span=0.2, se=FALSE)+
-  scale_x_continuous(breaks=seq(0,660,30))+
-  scale_color_manual(values=two_cols[1])+
-  labs(x="Transcript position", y="CPM", title="45 nt P-site offset")+
-  theme_cowplot()
-
-rm(comt_cov_by_pos_gg)
-
-# This suggests uORF_A and the cytosolic isoform have disomes with
-# leading ribosome awaiting Met-tRNA
-
-# Investigate signal for the IRES-mCherry start
-comt_cov_by_pos_mcherry_dt<- comt_cov_by_pos_dt[
-    experiment=="20210607-conventional" & position%in%mcherry_utr5_cds_positions,]
-
-comt_cov_by_pos_mcherry_gg<- ggplot(
-  data=comt_cov_by_pos_mcherry_dt,
-  aes(x=position, y=CPM))
-
-psite_fiveprime_offset<- asite_fiveprime_offset - 3
-mcherry_orf_5prime_adj_pos<- mcherry_start - psite_fiveprime_offset
-
-comt_cov_by_pos_mcherry_gg+
-  geom_vline(xintercept=mcherry_orf_5prime_adj_pos, col="darkorange", linetype=2)+
-  geom_point(alpha=0.75, size=2)+
-  geom_smooth(span=0.2, se=FALSE)+
-  scale_x_continuous(breaks=seq(2350,2560,30))+
-  scale_color_manual(values=two_cols[1])+
-  labs(x="Transcript position", y="CPM", 
-       title="mCherry start, 15 nt P-site offset")+
-  theme_cowplot()
-
-# No clear initiating signal for mCherry with 15 nt offset
-
-# Now for disome offset
-comt_cov_by_pos_mcherry_gg<- ggplot(
-  data=comt_cov_by_pos_mcherry_dt,
-  aes(x=position, y=CPM))
-
-psite_fiveprime_offset<- 45
-mcherry_orf_5prime_adj_pos<- mcherry_start - psite_fiveprime_offset
-
-comt_cov_by_pos_mcherry_gg+
-  geom_vline(lwd=1.05, xintercept=mcherry_orf_5prime_adj_pos, col="darkorange", linetype=3)+
-  geom_point(alpha=0.75, size=2)+
-  geom_smooth(span=0.2, se=FALSE)+
-  scale_x_continuous(breaks=seq(2350,2560,30))+
-  scale_color_manual(values=two_cols[1])+
-  labs(x="Transcript position", y="CPM", 
-       title="mCherry start, 45 nt P-site offset")+
-  theme_cowplot()
-
-rm(comt_cov_by_pos_mcherry_gg)
-
-# IRES-mCherry, translation initiation likely starts just upstream of the start codon
+# Suggests initiation at uORF_A and membrane isoform
+# possibly initiation at uORF_B?
 
 ```
 
@@ -2151,10 +1868,6 @@ comt_all_dt[,Quadrant:=as.factor(Quadrant)]
 # Need the VAR_ID for RF filtering
 comt_all_dt[, VAR_ID:=paste(`#CHROM`, POS, REF, ALT, sep=":")]
 
-# Remove libraries that were accidentally swapped between ROIs during 
-# library prep
-comt_failed_libraries<- paste("COMT", c(seq(70,85), 147, 148), "R", sep="_")
-
 ```
 
 ```{r COMT ROI_1, ROI_2 gDNA and total and polysomal RNA sequencing variant filtering, batch correction, and rep. summarization}
@@ -2219,8 +1932,7 @@ rm(comt_roi1_mnp_distr_gg)
 # Use a log10 frequency threshold of -4 for MNPs as those observed in negative control are likely 
 # from barcode crosstalk on the sequencer
 comt_03nov2022_sim_roi1_filt_dt<- 
-  comt_03nov2022_sim_roi1_dt[
-    POS%in%pDEST_roi1_mutagenesis_coords & (TYPE=="SNP" | log10(CAF)>-4)]
+  comt_03nov2022_sim_roi1_dt[POS%in%pDEST_roi1_mutagenesis_coords & (TYPE=="SNP" | log10(CAF)>-4)]
 
 comt_03nov2022_sim_roi1_prep_dt<- prep_train_dt(
   train_dt=comt_03nov2022_sim_roi1_filt_dt, 
@@ -2294,8 +2006,7 @@ comt_03nov2022_sim_roi2_prep_test_prec<- get_precision(comt_03nov2022_sim_roi2_p
 # 1) in the target regions
 # 2) nonsense variants that match TAG (only stop codon expected/mutagenized)
 
-comt_all_filt_dt<- comt_all_dt[
-  !Sample%in%comt_failed_libraries & POS%in%pDEST_mutagenesis_coords & !is.na(ROI) & !ALT_CODON%in%c("TAA", "TGA")]
+comt_all_filt_dt<- comt_all_dt[POS%in%pDEST_mutagenesis_coords & !is.na(ROI) & !ALT_CODON%in%c("TAA", "TGA")]
 
 comt_all_roi1_dt<- comt_all_filt_dt[ROI=="ROI_1"]
 comt_all_roi2_dt<- comt_all_filt_dt[ROI=="ROI_2"]
@@ -2546,7 +2257,7 @@ comt_rep_cast_dt<- dcast(
 facs_total_samples_drop<- c("COMT_120_R", "COMT_130_R", "COMT_146_R", "COMT_145_R", "COMT_47_R", "COMT_57_R", "COMT_173_R", "COMT_174_R")
 
 # Finally add in polysome libraries from set 1 (first experiment) which used a different metafraction pooling strategy
-comt_libraries_drop<- c(comt_failed_libraries, facs_total_samples_drop, poly_all_metafrac_set1_samples)
+comt_libraries_drop<- c(facs_total_samples_drop, poly_all_metafrac_set1_samples)
 
 comt_all_filt_postprocess_subtract_drop_dt<- comt_all_filt_postprocess_subtract_clean_dt[!Sample%in%comt_libraries_drop]
 
@@ -3686,6 +3397,7 @@ comt_rna_limma_input_cast_eset_fit_eb_all_merge_dt<- merge(
 
 ```{r ALDEx2 utilities}
 
+# https://rdrr.io/bioc/ALDEx2/src/R/rdirichlet.r
 aitchison.mean<- function(n, log=FALSE){
 
     # Input is a vector of non-negative integer counts.
@@ -7230,6 +6942,24 @@ comt_poly_input_cast_mat_cpm_aldex_all_merge_codon_optimal<-
 
 # No optimal dicodons found
 
+comt_poly_input_cast_mat_cpm_aldex_all_merge_dt[,Dicodon:="NA"]
+comt_poly_input_cast_mat_cpm_aldex_all_merge_dt[comt_poly_input_cast_mat_cpm_aldex_all_merge_codon_inhib, Dicodon:="Inhibitory"]
+comt_poly_input_cast_mat_cpm_aldex_all_merge_dt[comt_poly_input_cast_mat_cpm_aldex_all_merge_codon_optimal, Dicodon:="Optimal"]
+
+# Is there a association with dicodons and effect size with no significance cutoff?
+poly_dicodons_gg<- ggplot(
+  data=comt_poly_input_cast_mat_cpm_aldex_all_merge_dt, 
+  aes(x=Dicodon, y=effect))
+
+poly_dicodons_gg+
+  facet_wrap(~Fraction)+
+  geom_boxplot()+
+  theme_cowplot()
+
+rm(poly_dicodons_gg)
+
+# Trend in expected direction but difference is weak
+
 # Inhibitory dipeptides
 comt_poly_input_cast_mat_cpm_aldex_all_merge_aa_inhib<- 
   sapply(comt_poly_input_cast_mat_cpm_aldex_all_merge_dt[,VAR_ID], check_dipeptides,
@@ -7237,7 +6967,7 @@ comt_poly_input_cast_mat_cpm_aldex_all_merge_aa_inhib<-
 
 #comt_poly_input_cast_mat_cpm_aldex_all_merge_dt[comt_poly_input_cast_mat_cpm_aldex_all_merge_aa_inhib, table(Direction)]
 
-# 6 variants to inhibitory AAs were down in polysome F3, 2 up in polysomes (F3, F4)
+# 6 significant variants to inhibitory AAs were down in polysome F3, 2 up in polysomes (F3, F4)
 
 comt_poly_input_cast_mat_cpm_aldex_all_merge_dt[
   comt_poly_input_cast_mat_cpm_aldex_all_merge_aa_inhib & Direction=="Poly down", .(Fraction, ID_SHORT, effect, we.eBH)]
@@ -7253,7 +6983,25 @@ comt_poly_input_cast_mat_cpm_aldex_all_merge_aa_optimal<-
 
 #comt_poly_input_cast_mat_cpm_aldex_all_merge_dt[comt_poly_input_cast_mat_cpm_aldex_all_merge_aa_optimal, table(Direction)]
 
-# No variants leading to optimal dipeptides
+# No significant variants leading to optimal dipeptides
+
+comt_poly_input_cast_mat_cpm_aldex_all_merge_dt[,Dipeptide:="NA"]
+comt_poly_input_cast_mat_cpm_aldex_all_merge_dt[comt_poly_input_cast_mat_cpm_aldex_all_merge_aa_inhib, Dipeptide:="Inhibitory"]
+comt_poly_input_cast_mat_cpm_aldex_all_merge_dt[comt_poly_input_cast_mat_cpm_aldex_all_merge_aa_optimal, Dipeptide:="Optimal"]
+
+# Is there a association with dipeptides and effect size with no significance cutoff?
+poly_dipeptides_gg<- ggplot(
+  data=comt_poly_input_cast_mat_cpm_aldex_all_merge_dt, 
+  aes(x=Dipeptide, y=effect))
+
+poly_dipeptides_gg+
+  facet_wrap(~Fraction)+
+  geom_boxplot()+
+  theme_cowplot()
+
+rm(poly_dipeptides_gg)
+
+# Trend in expected direction but difference is weak
 
 # Investigate if variants altering methionine have any properties
 comt_poly_input_cast_mat_cpm_aldex_all_merge_dt[REF_AA=="M", M_variant:="From"]
@@ -7325,32 +7073,83 @@ comt_poly_silent_gg+
 
 # No association with A- and P-site dwell scores
 
-# What about silent variants in the wobble position?
+# Reviewer #2 question about no relationship between polysome effects and hydrophobicity
+positive_charged_aas<- c("R", "H", "K")
+negative_charged_aas<- c("D", "E")
+polar_uncharged_aas<- c("S", "T", "N", "Q") # C
+nonpolar_uncharged_aas<- c("A", "V", "I", "L", "M", "F", "Y", "W", "G")
+other_aas<- c("C", "P")
 
+comt_poly_input_cast_mat_cpm_aldex_all_merge_dt[REF_AA%in%positive_charged_aas, REF_TYPE:="PC"]
+comt_poly_input_cast_mat_cpm_aldex_all_merge_dt[REF_AA%in%negative_charged_aas, REF_TYPE:="NC"]
+comt_poly_input_cast_mat_cpm_aldex_all_merge_dt[REF_AA%in%polar_uncharged_aas, REF_TYPE:="PU"]
+comt_poly_input_cast_mat_cpm_aldex_all_merge_dt[REF_AA%in%nonpolar_uncharged_aas, REF_TYPE:="NU"]
+comt_poly_input_cast_mat_cpm_aldex_all_merge_dt[REF_AA%in%other_aas, REF_TYPE:="Other"]
+
+comt_poly_input_cast_mat_cpm_aldex_all_merge_dt[ALT_AA%in%positive_charged_aas, ALT_TYPE:="PC"]
+comt_poly_input_cast_mat_cpm_aldex_all_merge_dt[ALT_AA%in%negative_charged_aas, ALT_TYPE:="NC"]
+comt_poly_input_cast_mat_cpm_aldex_all_merge_dt[ALT_AA%in%polar_uncharged_aas, ALT_TYPE:="PU"]
+comt_poly_input_cast_mat_cpm_aldex_all_merge_dt[ALT_AA%in%nonpolar_uncharged_aas, ALT_TYPE:="NU"]
+comt_poly_input_cast_mat_cpm_aldex_all_merge_dt[ALT_AA%in%other_aas, ALT_TYPE:="Other"]
+
+comt_poly_input_cast_mat_cpm_aldex_all_merge_dt[
+  ,REF_TYPE:=factor(REF_TYPE, levels=c(
+    "PC", "NC", "PU", "NU", "Other"))]
+
+comt_poly_input_cast_mat_cpm_aldex_all_merge_dt[
+  ,ALT_TYPE:=factor(ALT_TYPE, levels=c(
+    "PC", "NC", "PU", "NU", "Other"))]
+
+# Are there differences in effect size distribution for reference nonpolar uncharged residues to other amino acid types?
+poly_aa_type_gg<- ggplot(
+  data=comt_poly_input_cast_mat_cpm_aldex_all_merge_dt[!is.na(ALT_TYPE) & REF_TYPE=="NU"], 
+  aes(x=ALT_TYPE, y=effect))
+
+poly_aa_type_gg+
+  facet_wrap(~Fraction)+
+  geom_hline(yintercept=0, col="grey", linetype=2)+
+  geom_boxplot()+
+  labs(x="Alternate type", y="Poly effect size")+
+  theme_cowplot()
+
+rm(poly_aa_type_gg)
+
+wilcox.test(formula=effect~ALT_TYPE, data=comt_poly_input_cast_mat_cpm_aldex_all_merge_dt[
+  Fraction=="F3" & !is.na(ALT_TYPE) & REF_TYPE=="NU" & ALT_TYPE%in%c("PU", "NU")])
+
+wilcox.test(formula=effect~ALT_TYPE, data=comt_poly_input_cast_mat_cpm_aldex_all_merge_dt[
+  Fraction=="F4" & !is.na(ALT_TYPE) & REF_TYPE=="NU" & ALT_TYPE%in%c("PU", "NU")])
+
+# It appears nonpolar uncharged to other nonpolar uncharged shows higher effect sizes compared to
+# nonpolar uncharged to polar uncharged; but this effect is quite weak
+
+# However this is seen for all fractions; the fact that it is seen for ROI 2 F2, in which nonsense
+# variants have higher effect sizes, seems contrary to expectation of enrichment in heavy polysomes
+# as being indicative of higher translational output
 
 ```
 
 ```{r Poly versus RNA abundance limma}
 
-comt_rna_vs_protein_dt<- merge(
+comt_rna_vs_poly_dt<- merge(
   comt_rna_limma_input_cast_eset_fit_eb_all_merge_dt[,.(VAR_ID, logFC, adj.P.Val)],
   comt_poly_limma_input_cast_mat_eset_fit_eb_all_merge_dt, 
   by="VAR_ID")
 
-comt_rna_vs_protein_dt[
+comt_rna_vs_poly_dt[
   (logFC.x < -0.4 & logFC.y > 0.3) |
     (logFC.x > 0.5 & logFC.y < -0.5), Label:=AA_CHANGE]
 
-comt_rna_vs_protein_gg<- ggplot(
-  data=comt_rna_vs_protein_dt[Fraction%in%c("F3","F4")], 
+comt_rna_vs_poly_gg<- ggplot(
+  data=comt_rna_vs_poly_dt[Fraction%in%c("F3","F4")], 
   aes(x=logFC.x, y=logFC.y, label=Label))
 
-comt_rna_vs_protein_gg+
+comt_rna_vs_poly_gg+
   geom_point(alpha=0.5)+
   facet_wrap(~Fraction)+
-  geom_point(data=comt_rna_vs_protein_dt[Fraction%in%c("F3","F4") & VAR_TYPE=="Silent"], 
+  geom_point(data=comt_rna_vs_poly_dt[Fraction%in%c("F3","F4") & VAR_TYPE=="Silent"], 
              aes(x=logFC.x, y=logFC.y), col="dodgerblue")+
-  geom_point(data=comt_rna_vs_protein_dt[Fraction%in%c("F3","F4") & VAR_TYPE=="Nonsense"], 
+  geom_point(data=comt_rna_vs_poly_dt[Fraction%in%c("F3","F4") & VAR_TYPE=="Nonsense"], 
              aes(x=logFC.x, y=logFC.y), col="firebrick")+
   geom_text_repel()+
   geom_hline(yintercept=0, col="grey", linetype=2)+
@@ -7358,40 +7157,40 @@ comt_rna_vs_protein_gg+
   theme_cowplot()+
   labs(x="RNA log FC", y="Poly log FC")
 
-rm(comt_rna_vs_protein_gg)
+rm(comt_rna_vs_poly_gg)
 
 ```
 
 ```{r Poly versus RNA abundance ALDEx2}
 
-comt_rna_vs_protein_aldex_dt<- merge(
+comt_rna_vs_poly_aldex_dt<- merge(
   comt_rna_input_cast_mat_cpm_aldex_merge_dt[,.(VAR_ID, diff.btw, effect, we.eBH)],
   comt_poly_input_cast_mat_cpm_aldex_all_merge_dt, 
   by="VAR_ID")
 
-comt_rna_vs_protein_aldex_gg<- ggplot(
-  data=comt_rna_vs_protein_aldex_dt[Fraction%in%c("F3","F4") & VAR_TYPE=="Missense"], 
+comt_rna_vs_poly_aldex_gg<- ggplot(
+  data=comt_rna_vs_poly_aldex_dt[Fraction%in%c("F3","F4") & VAR_TYPE=="Missense"], 
   aes(x=effect.x, y=effect.y))
 
-comt_rna_vs_protein_aldex_gg+
+comt_rna_vs_poly_aldex_gg+
   geom_point(alpha=0.5)+
   facet_wrap(~Fraction)+
-  geom_point(data=comt_rna_vs_protein_aldex_dt[Fraction%in%c("F3","F4") & VAR_TYPE=="Silent"], 
+  geom_point(data=comt_rna_vs_poly_aldex_dt[Fraction%in%c("F3","F4") & VAR_TYPE=="Silent"], 
              aes(x=effect.x, y=effect.y), col="dodgerblue")+
-  geom_point(data=comt_rna_vs_protein_aldex_dt[Fraction%in%c("F3","F4") & VAR_TYPE=="Nonsense"], 
+  geom_point(data=comt_rna_vs_poly_aldex_dt[Fraction%in%c("F3","F4") & VAR_TYPE=="Nonsense"], 
              aes(x=effect.x, y=effect.y), col="firebrick")+
   geom_hline(yintercept=0, col="grey", linetype=2)+
   geom_vline(xintercept=0, col="grey", linetype=2)+
   theme_cowplot()+
   labs(x="RNA effect", y="Poly effect")
 
-rm(comt_rna_vs_protein_aldex_gg)
+rm(comt_rna_vs_poly_aldex_gg)
 
-comt_rna_silent_vs_nonsense_aldex_gg<- ggplot(
-  data=comt_rna_vs_protein_aldex_dt[Fraction%in%c("F3","F4") & VAR_TYPE!="Missense"],
+comt_poly_silent_vs_nonsense_aldex_gg<- ggplot(
+  data=comt_rna_vs_poly_aldex_dt[Fraction%in%c("F3","F4") & VAR_TYPE!="Missense"],
   aes(x=Fraction, y=effect.y, col=VAR_TYPE))
 
-comt_rna_silent_vs_nonsense_aldex_gg+
+comt_poly_silent_vs_nonsense_aldex_gg+
   geom_point(position=position_jitterdodge(), alpha=0.75)+
   scale_color_manual(values=c("dodgerblue", "firebrick"))+
   stat_summary(fun=median, fun.min=median, fun.max=median,
@@ -7399,16 +7198,18 @@ comt_rna_silent_vs_nonsense_aldex_gg+
   theme_cowplot()+
   labs(x="", y="Polysome effect", col="")
 
-rm(comt_rna_silent_vs_nonsense_aldex_gg)
+rm(comt_poly_silent_vs_nonsense_aldex_gg)
 
 # Test silent versus nonsense variants in each fraction
-comt_rna_vs_protein_aldex_dt[
+comt_rna_vs_poly_aldex_dt[
   VAR_TYPE!="Missense" & Fraction=="F3", wilcox.test(
     formula=effect.y~VAR_TYPE, data=.SD)]
 
-comt_rna_vs_protein_aldex_dt[
+comt_rna_vs_poly_aldex_dt[
   VAR_TYPE!="Missense" & Fraction=="F4", wilcox.test(
     formula=effect.y~VAR_TYPE, data=.SD)]
+
+write.table(comt_rna_vs_poly_aldex_dt[Fraction%in%c("F3","F4") & VAR_TYPE!="Missense"], "/Users/ianhoskins/data_staging/integrative_MAVEs/MSB_submission/2nd_revision/Source_data/MSB-2023-12096_SourceDataForFigure4A/res.txt", sep="\t", quote=FALSE, row.names=FALSE)
 
 ```
 
@@ -9892,11 +9693,8 @@ pheatmap(comt_rep_summ_cast_nona_iqlr_mat_filt_high_var, clustering_method="ward
 #' @param x numeric or integer vector
 #' @param standardize logical indicating the data should also be standardized after centering
 #' @return numeric vector centered and possibly standardized
-robust_center<- function(x, standardize=FALSE){
+robust_center<- function(x){
   centered_x<- x - median(x, na.rm=TRUE)
-  if(standardize==TRUE){
-    centered_x<- centered_x / sd(centered_x, na.rm=TRUE)
-  }
   return(centered_x)
 }
 
@@ -10329,4 +10127,175 @@ fisher.test(gnomad_table)
 
 ```
 
+
+# TF binding sites for WT and variants
+
+```{r TFBS analysis}
+
+library(Biostrings)
+
+# Scan the ROIs for TF binding sites
+# Use a buffer +/- 33 nt around each ROI target
+
+tfbs_jaspar_matrix_file<- paste(tfbs_dir, "JASPAR_matrices", sep="/")
+
+tfbs_jaspar_pwm_matrix_list<- toPWM(readJASPARMatrix(tfbs_jaspar_matrix_file, matrixClass="PFM"))
+tfbs_jaspar_TFs<- names(sapply(tfbs_jaspar_pwm_matrix_list, names))
+
+# Determine max width of a TFBS
+get_pwm_matrix<- function(x){
+  res<- x@profileMatrix
+  return(res)
+}
+
+tfbs_jaspar_matrices<- lapply(tfbs_jaspar_pwm_matrix_list, get_pwm_matrix)
+tfbs_jaspar_matrices_max_width<- sapply(tfbs_jaspar_matrices, ncol)
+# max(tfbs_jaspar_matrices_max_width)
+# Thus we need a 33 nt buffer around the ROIs to find all TFBSs
+
+# Determine gene names that are only uppercase (presumed human)
+tfbs_jaspar_TFs_human<- grep("[[:lower:]]", tfbs_jaspar_TFs, invert=TRUE)
+
+# Filter to only human TFBSs
+tfbs_jaspar_pwm_matrix_human_list<- tfbs_jaspar_pwm_matrix_list[tfbs_jaspar_TFs_human]
+
+roi_template_seqs<- toupper(c(
+  "ROI_1"="tggggctggggcctgtgccttatcggctggaacgagttcatcctgcagcccatccacaacctgctcatgggtgacaccaaggagcagcgcatcctgaaccacgtgctgcagcatgcggagcccgggaacgcacagagcgtgctggaggccattgacacctactgcgagcag",
+  "ROI_2"="cgcatggcccgcctgctgtcaccaggggcgaggctgatcaccatcgagatcaaccccgactgtgccgccatcacccagcggatggtggatttcgctggcgtgaaggacaaggtcacccttgtggttggagcgtcc"))
+
+roi_template_dss<- DNAStringSet(roi_template_seqs)
+roi_template_tfbs<- searchSeq(tfbs_jaspar_pwm_matrix_human_list, roi_template_dss, min.score=0.0, mc.cores=1)
+roi_template_tfbs_dt<- as.data.table(as(roi_template_tfbs, "data.frame"))
+rm(roi_template_tfbs)
+
+# Took ~30 s to scan one ROI sequence; for variants, only search those that are significant
+# in RNA at a FDR < 0.1
+
+# First generate the variant in the ROI_1 and ROI_2 template backgrounds
+tfbs_roi_offsets<- c("ROI_1"=4761, "ROI_2"=5049)
+
+generate_var_seq<- function(var_id, roi, template_seqs=roi_template_seqs, roi_offsets=tfbs_roi_offsets){
+  
+  template_seq<- roi_template_seqs[roi]
+  roi_offset<- roi_offsets[roi]
+  
+  # Generate the sequence in the template
+  var_id_split<- unlist(strsplit(as.character(var_id), ":"))
+  var_pos<- as.integer(var_id_split[2])
+  ref_len<- nchar(var_id_split[3])
+  var_alt<- var_id_split[4]
+  var_pos_offset<- var_pos - roi_offset
+    
+  var_seq<- paste(
+    substr(template_seq, 1, var_pos_offset), var_alt,
+    substr(template_seq, var_pos_offset + ref_len + 1, nchar(template_seq)),
+    sep="")
+  
+  names(var_seq)<- var_id
+  return(var_seq)
+}
+
+# Get buffered variant sequences for significant (FDR < 0.1) silent and missense variants
+rna_sig_var_ids_dt<- comt_rna_input_cast_mat_cpm_aldex_merge_dt[we.eBH < comt_rna_fdr_thresh & VAR_TYPE!="Nonsense", VAR_ID, by=.(ROI)]
+rna_sig_var_ids_dt[ROI=="ROI_1", var_seqs:=sapply(rna_sig_var_ids_dt[ROI=="ROI_1", VAR_ID], generate_var_seq, roi="ROI_1")]
+rna_sig_var_ids_dt[ROI=="ROI_2", var_seqs:=sapply(rna_sig_var_ids_dt[ROI=="ROI_2", VAR_ID], generate_var_seq, roi="ROI_2")]
+
+rna_sig_var_seqs<- rna_sig_var_ids_dt[,var_seqs]
+names(rna_sig_var_seqs)<- rna_sig_var_ids_dt[,VAR_ID]
+rna_sig_var_dss<- DNAStringSet(rna_sig_var_seqs)
+
+# Now search all variant sequences for TFBSs
+rna_sig_var_tfbs<- searchSeq(tfbs_jaspar_pwm_matrix_human_list, rna_sig_var_dss, min.score=0.0, mc.cores=1)
+rna_sig_var_tfbs_dt<- as.data.table(as(rna_sig_var_tfbs, "data.frame"))
+rm(rna_sig_var_tfbs)
+
+names(rna_sig_var_tfbs_dt)[1]<- "VAR_ID"
+
+rna_sig_var_tfbs_dt<- merge(
+  rna_sig_var_tfbs_dt, comt_rna_input_cast_mat_cpm_aldex_merge_dt[
+    ,.(ROI, VAR_ID, effect, we.eBH)], by="VAR_ID")
+
+# Merge the variant and template TFBSs to determine differences in scores
+names(roi_template_tfbs_dt)[1]<- "ROI"
+roi_template_tfbs_dt[,TFBS_ID:=paste(ROI,ID,strand,start,end,sep=":")]
+rna_sig_var_tfbs_dt[,TFBS_ID:=paste(ROI,ID,strand,start,end,sep=":")]
+
+rna_sig_var_tfbs_merge_dt<- merge(
+  rna_sig_var_tfbs_dt[,.(TFBS_ID,ROI,VAR_ID,absScore,relScore,effect,we.eBH,siteSeqs)], 
+  roi_template_tfbs_dt[,.(TFBS_ID,ID,TF,strand,start,end,absScore,relScore,siteSeqs)], 
+  by="TFBS_ID", all=TRUE)
+
+rm(rna_sig_var_tfbs_dt)
+
+# Filter TFBSs that are the same between WT and variant
+# These likely do not overlap the variant or do not alter the TFBS score
+rna_sig_var_tfbs_merge_filt_dt<- rna_sig_var_tfbs_merge_dt[absScore.x!=absScore.y]
+rm(rna_sig_var_tfbs_merge_dt)
+
+rna_sig_var_tfbs_merge_filt_annot_dt<- merge(
+  rna_sig_var_tfbs_merge_filt_dt, annot_dt[,-c("ROI")], by="VAR_ID")
+
+# Scatterplot of TFBS score for template and variant for each variant type
+#rna_sig_var_tfbs_merge_filt_annot_dt[VAR_TYPE!="Nonsense", length(unique(VAR_ID))]
+# 22 variants overlapped TFBS sites
+
+# relScore.y is template, relScore.x is variant
+tfbs_scatter_gg<- ggplot(
+  data=rna_sig_var_tfbs_merge_filt_annot_dt,
+  aes(x=relScore.y, y=relScore.x))
+
+tfbs_scatter_gg+
+  geom_abline(slope=1, col="grey", linetype=2)+
+  geom_density_2d()+
+  theme_cowplot()+
+  labs(x="Template TFBS score", y="Variant TFBS score")
+
+# Get the TFBS that show top positive and negative difference for each variant
+select_max_diff_tfbs<- function(dt_slice, min_score=0.8){
+  dt_slice_filt<- dt_slice[relScore.x>=min_score]
+  dt_slice_filt[,Diff:=relScore.x-relScore.y]
+  res<- dt_slice_filt[,TFBS_ID[which.max(Diff)]]
+  return(res)
+}
+
+select_min_diff_tfbs<- function(dt_slice, min_score=0.8){
+  dt_slice_filt<- dt_slice[relScore.y>=min_score]
+  dt_slice_filt[,Diff:=relScore.y-relScore.x]
+  res<- dt_slice_filt[,TFBS_ID[which.max(Diff)]]
+  return(res)
+}
+
+rna_sig_var_tfbs_merge_filt_annot_dt[,Diff:=relScore.x-relScore.y]
+rna_sig_var_tfbs_merge_filt_annot_dt[,Max_TF:=select_max_diff_tfbs(.SD), by=.(VAR_ID), .SDcols=c("TFBS_ID", "siteSeqs.x", "relScore.x", "relScore.y")]
+rna_sig_var_tfbs_merge_filt_annot_dt[,Min_TF:=select_min_diff_tfbs(.SD), by=.(VAR_ID), .SDcols=c("TFBS_ID", "siteSeqs.x", "relScore.x", "relScore.y")]
+
+rna_sig_var_tfbs_merge_filt_annot_uniq_dt<- unique(rna_sig_var_tfbs_merge_filt_annot_dt[
+  ,.(ROI, VAR_ID, REF, ALT, AA_CHANGE, effect, we.eBH, Max_TF, Min_TF)])
+
+# Finally annotate with the score and TFBS
+rna_sig_var_tfbs_merge_filt_annot_dt[,Key:=paste(VAR_ID, TFBS_ID, sep=":")]
+rna_sig_var_tfbs_merge_filt_annot_uniq_dt[,Key:=paste(VAR_ID, Max_TF, sep=":")]
+
+# This way is a little sloppy but it works
+rna_sig_var_tfbs_merge_filt_annot_uniq_final_dt<- merge(
+  rna_sig_var_tfbs_merge_filt_annot_uniq_dt, 
+  rna_sig_var_tfbs_merge_filt_annot_dt[,.(Key,TF,siteSeqs.x,strand,relScore.x,relScore.y)], by="Key")
+
+names(rna_sig_var_tfbs_merge_filt_annot_uniq_final_dt)[(ncol(rna_sig_var_tfbs_merge_filt_annot_uniq_final_dt)-4):ncol(rna_sig_var_tfbs_merge_filt_annot_uniq_final_dt)]<- c("Max_TF_gene", "Max_TF_seq", "Max_TF_strand", "Max_TF_relScore_var", "Max_TF_relScore_WT")
+
+rna_sig_var_tfbs_merge_filt_annot_uniq_final_dt[,Key:=paste(VAR_ID, Min_TF, sep=":")]
+
+rna_sig_var_tfbs_merge_filt_annot_uniq_final_dt<- merge(
+  rna_sig_var_tfbs_merge_filt_annot_uniq_final_dt, 
+  rna_sig_var_tfbs_merge_filt_annot_dt[,.(Key,TF,siteSeqs.x,strand,relScore.x,relScore.y)], by="Key")
+
+names(rna_sig_var_tfbs_merge_filt_annot_uniq_final_dt)[(ncol(rna_sig_var_tfbs_merge_filt_annot_uniq_final_dt)-4):ncol(rna_sig_var_tfbs_merge_filt_annot_uniq_final_dt)]<- c("Min_TF_gene", "Min_TF_seq", "Min_TF_strand", "Min_TF_relScore_var", "Min_TF_relScore_WT")
+
+rna_sig_var_tfbs_merge_filt_annot_uniq_final_dt<- rna_sig_var_tfbs_merge_filt_annot_uniq_final_dt[,-c("Key", "Max_TF", "Min_TF")]
+
+tfbs_output_file<- paste(comt_res_base_dir, "RNA_sig_TFBS.txt", sep="/")
+
+write.table(rna_sig_var_tfbs_merge_filt_annot_uniq_final_dt, tfbs_output_file, quote=FALSE, sep="\t", row.names=FALSE)
+
+```
 
