@@ -1,14 +1,14 @@
 ---
 title: "COMT integrated MAVEs"
 author: "Ian Hoskins"
-date: "12/19/2023"
+date: "1/14/2024"
 output:
   html_document:
     df_print: paged
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo=FALSE, warning=FALSE, message=FALSE)
+knitr::opts_chunk$set(echo=FALSE, warning=FALSE, message=FALSE, cache=TRUE)
 ```
 
 
@@ -122,9 +122,28 @@ reclose_coda<- function(x){
   reclosed<- x/sum(x, na.rm=TRUE)
 }
 
+geom_mean<- function(x){
+  res<- exp(mean(log(x), na.rm=TRUE))
+  return(res)
+}
+
+clr<- function(x){
+  res<- log(x) - log(geom_mean(x))
+  return(res)
+}
+
 iqlr<- function(x){
-  iqr<- quantile(x, probs=0.75, na.rm=TRUE) - quantile(x, probs=0.25, na.rm=TRUE)
-  res<- log(x) - log(iqr)
+  # Get features between IQR of the CLRs
+  x_clr<- clr(x)
+  clr_vars<- matrixStats::rowVars(x_clr, na.rm=TRUE)
+  first_quartile<- quantile(clr_vars, probs=0.25, na.rm=TRUE)
+  third_quartile<- quantile(clr_vars, probs=0.75, na.rm=TRUE)
+  iqvf_idx<- which(clr_vars > first_quartile & clr_vars < third_quartile)
+  iqvf<- x[iqvf_idx,]
+  
+  # Compute IQLR
+  iqvf_gm<- geom_mean(iqvf)
+  res<- log(x) - log(iqvf_gm)
   return(res)
 }
 
@@ -2646,7 +2665,7 @@ rm(comt_rep_summ_freq_gg)
 comt_rep_cast_mat<- as.matrix(comt_rep_cast_dt[,-c("ROI", "VAR_ID")])
 rownames(comt_rep_cast_mat)<- comt_rep_cast_dt[,VAR_ID]
 comt_rep_cast_mat_reclose<- apply(10^comt_rep_cast_mat, 2, reclose_coda)
-comt_rep_cast_mat_iqlr<- apply(comt_rep_cast_mat_reclose, 2, iqlr)
+comt_rep_cast_mat_iqlr<- iqlr(comt_rep_cast_mat_reclose)
 comt_rep_cast_mat_iqlr_dt<- as.data.table(comt_rep_cast_mat_iqlr)
 
 comt_rep_cast_mat_iqlr_dt[,ROI:=comt_rep_cast_dt[,ROI]]
@@ -2975,7 +2994,7 @@ comt_rep_cast_mat_iqlr_dt[,cor(x=COMT_151_R, y=COMT_155_R, use="pairwise.complet
 
 roi1_poly_f4_rep_cor_gg<- ggplot(
   data=comt_rep_cast_mat_iqlr_dt, 
-  aes(x=COMT_152_R, y=COMT_156_R))
+  aes(x=COMT_65_R, y=COMT_69_R))
 
 roi1_poly_f4_rep_cor_gg<- roi1_poly_f4_rep_cor_gg+
   geom_point(alpha=0.75)+
@@ -2983,7 +3002,7 @@ roi1_poly_f4_rep_cor_gg<- roi1_poly_f4_rep_cor_gg+
   coord_cartesian(xlim=c(-6,4), y=c(-6,4))+
   theme_cowplot()
 
-comt_rep_cast_mat_iqlr_dt[,cor(x=COMT_152_R, y=COMT_156_R, use="pairwise.complete.obs")]
+comt_rep_cast_mat_iqlr_dt[,cor(x=COMT_65_R, y=COMT_69_R, use="pairwise.complete.obs")]
 
 roi1_facs_p1_rep_cor_gg<- ggplot(
   data=comt_rep_cast_mat_iqlr_dt, 
@@ -2999,7 +3018,7 @@ comt_rep_cast_mat_iqlr_dt[,cor(x=COMT_121_R, y=COMT_131_R, use="pairwise.complet
 
 roi1_facs_p3_rep_cor_gg<- ggplot(
   data=comt_rep_cast_mat_iqlr_dt, 
-  aes(x=COMT_123_R, y=COMT_133_R))
+  aes(x=COMT_45_R, y=COMT_55_R))
 
 roi1_facs_p3_rep_cor_gg<- roi1_facs_p3_rep_cor_gg+
   geom_point(alpha=0.75)+
@@ -3007,7 +3026,7 @@ roi1_facs_p3_rep_cor_gg<- roi1_facs_p3_rep_cor_gg+
   coord_cartesian(xlim=c(-6,4), y=c(-6,4))+
   theme_cowplot()
 
-comt_rep_cast_mat_iqlr_dt[,cor(x=COMT_123_R, y=COMT_133_R, use="pairwise.complete.obs")]
+comt_rep_cast_mat_iqlr_dt[,cor(x=COMT_45_R, y=COMT_55_R, use="pairwise.complete.obs")]
 
 # ROI_2
 roi2_gdna_rep_cor_gg<- ggplot(
@@ -3060,7 +3079,7 @@ comt_rep_cast_mat_iqlr_dt[,cor(x=COMT_160_R, y=COMT_164_R, use="pairwise.complet
 
 roi2_facs_p1_rep_cor_gg<- ggplot(
   data=comt_rep_cast_mat_iqlr_dt, 
-  aes(x=COMT_127_R, y=COMT_137_R))
+  aes(x=COMT_126_R, y=COMT_136_R))
 
 roi2_facs_p1_rep_cor_gg<- roi2_facs_p1_rep_cor_gg+
   geom_point(alpha=0.75)+
@@ -3068,7 +3087,7 @@ roi2_facs_p1_rep_cor_gg<- roi2_facs_p1_rep_cor_gg+
   coord_cartesian(xlim=c(-6,4), y=c(-6,4))+
   theme_cowplot()
 
-comt_rep_cast_mat_iqlr_dt[,cor(x=COMT_127_R, y=COMT_137_R, use="pairwise.complete.obs")]
+comt_rep_cast_mat_iqlr_dt[,cor(x=COMT_126_R, y=COMT_136_R, use="pairwise.complete.obs")]
 
 roi2_facs_p3_rep_cor_gg<- ggplot(
   data=comt_rep_cast_mat_iqlr_dt, 
@@ -3099,6 +3118,18 @@ roi2_f4_bio_rep_cors<- c(0.537, 0.677, 0.670, 0.672, 0.661, 0.717, 0.719, 0.713,
 
 roi1_q3_bio_rep_cors<- c(.579, .415, .440, .432, .444, .542)
 roi2_q3_bio_rep_cors<- c(.055, .551, .513, .726, .186, .280, .116, .861, .732, .735)
+
+#mean(roi1_f3_bio_rep_cors)
+#mean(roi1_f4_bio_rep_cors)
+
+#mean(roi2_f3_bio_rep_cors)
+#mean(roi2_f4_bio_rep_cors)
+
+#sd(roi1_f3_bio_rep_cors)
+#sd(roi1_f4_bio_rep_cors)
+
+#sd(roi2_f3_bio_rep_cors)
+#sd(roi2_f4_bio_rep_cors)
 
 ```
 
@@ -3738,7 +3769,6 @@ reclose_coda<- function(x){
   return(reclosed)
 }
 
-
 ```
 
 ```{r COMT RNA ALDEx2}
@@ -3747,7 +3777,7 @@ comt_rna_fdr_thresh<- 0.1
 
 # First transform normalized frequencies to counts per million
 comt_rna_input_cast_mat_cpm<- apply(comt_rna_limma_input_cast_mat, 2, function(x){round(exp(x)*1e6)})
-comt_rna_input_cast_mat_cpm_iqlr<- apply(reclose_coda(comt_rna_input_cast_mat_cpm), 2, iqlr)
+comt_rna_input_cast_mat_cpm_iqlr<- iqlr(reclose_coda(comt_rna_input_cast_mat_cpm))
 comt_rna_input_cast_mat_cpm_iqlr_dt<- as.data.table(comt_rna_input_cast_mat_cpm_iqlr)
 comt_rna_input_cast_mat_cpm_iqlr_dt[,VAR_ID:=rownames(comt_rna_input_cast_mat_cpm_iqlr)]
 
@@ -3832,7 +3862,7 @@ comt_rna_aldex2_sig_gg+
   coord_flip()
 
 comt_rna_aldex2_sig_gg<- ggplot(
-  data=comt_rna_input_cast_mat_cpm_aldex_merge_iqlr_dt[we.eBH<0.03 & VAR_TYPE!="Nonsense"],
+  data=comt_rna_input_cast_mat_cpm_aldex_merge_iqlr_dt[we.eBH<0.05 & VAR_TYPE!="Nonsense"],
   aes(x=IQLR, y=reorder(ID_SHORT, POS), col=Input_clean))
 
 comt_rna_aldex2_sig_gg+
@@ -4016,6 +4046,8 @@ comt_roi_silent_missense_nonsense_gg+
   scale_fill_manual(values=roi_cols)+
   labs(x="Mutation type", y="Median effect size")+
   theme_cowplot()
+
+#comt_rna_aldex_rep_summ_ve_dt[!is.na(Median_effect), .N,by=.(ROI, VAR_TYPE)]
 
 wilcox.test(Median_effect~ROI, data=comt_rna_aldex_rep_summ_ve_dt[VAR_TYPE=="Silent"])
 wilcox.test(Median_effect~ROI, data=comt_rna_aldex_rep_summ_ve_dt[VAR_TYPE=="Missense"])
@@ -7209,8 +7241,6 @@ comt_rna_vs_poly_aldex_dt[
   VAR_TYPE!="Missense" & Fraction=="F4", wilcox.test(
     formula=effect.y~VAR_TYPE, data=.SD)]
 
-write.table(comt_rna_vs_poly_aldex_dt[Fraction%in%c("F3","F4") & VAR_TYPE!="Missense"], "/Users/ianhoskins/data_staging/integrative_MAVEs/MSB_submission/2nd_revision/Source_data/MSB-2023-12096_SourceDataForFigure4A/res.txt", sep="\t", quote=FALSE, row.names=FALSE)
-
 ```
 
 
@@ -9284,7 +9314,6 @@ rm(comt_poly_f4_vs_protein_gg)
 
 comt_rep_summ_cast_mat<- as.matrix(comt_rep_summ_cast_dt[,-c("ROI", "ID_SHORT", "Poly.2")])
 rownames(comt_rep_summ_cast_mat)<- comt_rep_summ_cast_dt[,ID_SHORT]
-#comt_rep_summ_cast_mat<- normalizeQuantiles(comt_rep_summ_cast_mat)
 
 # Convert to IQLR
 comt_rep_summ_cast_nona_mat<- comt_rep_summ_cast_mat[apply(comt_rep_summ_cast_mat, 1, row_is_complete),]
@@ -9294,7 +9323,7 @@ comt_rep_summ_cast_nona_mat_freqs<- 10^comt_rep_summ_cast_nona_mat
 # First reclose the dataset since WT frequency is not included in matrix
 comt_rep_summ_cast_nona_mat_freqs_reclose<- apply(comt_rep_summ_cast_nona_mat_freqs, 2, reclose_coda)
 
-comt_rep_summ_cast_nona_iqlr_mat<- apply(comt_rep_summ_cast_nona_mat_freqs_reclose, 2, iqlr)
+comt_rep_summ_cast_nona_iqlr_mat<- iqlr(comt_rep_summ_cast_nona_mat_freqs_reclose)
 comt_rep_summ_cast_nona_iqlr_dt<- as.data.table(comt_rep_summ_cast_nona_iqlr_mat)
 
 # Correlation between DNA and RNA
@@ -9936,21 +9965,6 @@ comt_rep_summ_cast_nona_iqlr_mat_filt_center_melt_rnasnp_dt[ID_SHORT%in%silent_i
 
 comt_rep_summ_cast_nona_iqlr_mat_filt_center_melt_rnasnp_dt[ID_SHORT%in%missense_ids & d_max_pval < 0.1, length(unique(ID_SHORT))] / length(missense_ids)
 
-# Z compositions library for NAs?
-
-# For LRA uses weighted parts for each variant (spectral mapping, Greenacre 2019 review)
-#comt_rep_summ_cast_nona_mat_freqs<- 10^comt_rep_summ_cast_nona_mat
-
-# First reclose the dataset since WT frequency is not included in matrix
-#comt_rep_summ_cast_nona_mat_freqs_reclose<- apply(comt_rep_summ_cast_nona_mat_freqs, 2, reclose_coda)
-
-#comt_rep_summ_cast_nona_mat_freqs_margins<- rowSums(comt_rep_summ_cast_nona_mat_freqs_reclose)
-#comt_rep_summ_cast_nona_mat_freqs_weights<- comt_rep_summ_cast_nona_mat_freqs_margins/sum(comt_rep_summ_cast_nona_mat_freqs_margins)
-
-# LRA expects samples in the rows and parts in the columns
-#comt_rep_summ_cast_nona_mat_freqs_reclose_t<- t(comt_rep_summ_cast_nona_mat_freqs_reclose)
-
-#comt_rep_summ_cast_nona_mat_freqs_reclose_lra<- LRA(comt_rep_summ_cast_nona_mat_freqs_reclose, row.wt=comt_rep_summ_cast_nona_mat_freqs_weights)
 ```
 
 
